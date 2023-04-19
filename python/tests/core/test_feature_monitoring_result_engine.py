@@ -152,8 +152,8 @@ class TestFeatureMonitoringResultEngine:
         result = mock_result_api.call_args[0][0]
         assert result._config_id == DEFAULT_CONFIG_ID
         assert result._execution_id == execution_id
-        assert result._detection_stats_id is None
-        assert result._reference_stats_id is None
+        assert result._detection_statistics_id is None
+        assert result._reference_statistics_id is None
         assert isinstance(result._detection_statistics, FeatureDescriptiveStatistics)
         assert isinstance(result._reference_statistics, FeatureDescriptiveStatistics)
         assert result._difference == difference
@@ -205,8 +205,8 @@ class TestFeatureMonitoringResultEngine:
         result = mock_result_api.call_args[0][0]
         assert result._config_id == DEFAULT_CONFIG_ID
         assert result._execution_id == execution_id
-        assert result._detection_stats_id is None
-        assert result._reference_stats_id is None
+        assert result._detection_statistics_id is None
+        assert result._reference_statistics_id is None
         assert isinstance(result._detection_statistics, FeatureDescriptiveStatistics)
         assert result._reference_statistics is None
         assert result._difference == difference
@@ -261,8 +261,8 @@ class TestFeatureMonitoringResultEngine:
         result = mock_result_api.call_args[0][0]
         assert result._config_id == DEFAULT_CONFIG_ID
         assert result._execution_id == execution_id
-        assert result._detection_stats_id is None
-        assert result._reference_stats_id is None
+        assert result._detection_statistics_id is None
+        assert result._reference_statistics_id is None
         assert isinstance(result._detection_statistics, FeatureDescriptiveStatistics)
         assert isinstance(result._reference_statistics, FeatureDescriptiveStatistics)
         assert result._difference == difference
@@ -316,8 +316,8 @@ class TestFeatureMonitoringResultEngine:
         result = mock_result_api.call_args[0][0]
         assert result._config_id == DEFAULT_CONFIG_ID
         assert result._execution_id == execution_id
-        assert result._detection_stats_id is None
-        assert result._reference_stats_id is None
+        assert result._detection_statistics_id is None
+        assert result._reference_statistics_id is None
         assert isinstance(result._detection_statistics, FeatureDescriptiveStatistics)
         assert result._reference_statistics is None
         assert result._difference == difference
@@ -378,8 +378,8 @@ class TestFeatureMonitoringResultEngine:
         result = mock_result_api.call_args[0][0]
         assert result._config_id == DEFAULT_CONFIG_ID
         assert result._execution_id == execution_id
-        assert result._detection_stats_id is None
-        assert result._reference_stats_id is None
+        assert result._detection_statistics_id is None
+        assert result._reference_statistics_id is None
         assert isinstance(result._detection_statistics, FeatureDescriptiveStatistics)
         assert isinstance(result._reference_statistics, FeatureDescriptiveStatistics)
         assert result._difference == difference
@@ -435,8 +435,8 @@ class TestFeatureMonitoringResultEngine:
         result = mock_result_api.call_args[0][0]
         assert result._config_id == DEFAULT_CONFIG_ID
         assert result._execution_id == execution_id
-        assert result._detection_stats_id is None
-        assert result._reference_stats_id is None
+        assert result._detection_statistics_id is None
+        assert result._reference_statistics_id is None
         assert isinstance(result._detection_statistics, FeatureDescriptiveStatistics)
         assert result._reference_statistics is None
         assert result._difference == difference
@@ -490,8 +490,8 @@ class TestFeatureMonitoringResultEngine:
         result = mock_result_api.call_args[0][0]
         assert result._config_id == DEFAULT_CONFIG_ID
         assert result._execution_id == execution_id
-        assert result._detection_stats_id is None
-        assert result._reference_stats_id is None
+        assert result._detection_statistics_id is None
+        assert result._reference_statistics_id is None
         assert isinstance(result._detection_statistics, FeatureDescriptiveStatistics)
         assert result._reference_statistics is None
         assert result._difference is None
