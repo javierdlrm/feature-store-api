@@ -62,9 +62,9 @@ class FeatureMonitoringConfigEngine:
             assert feature_view_id is not None
             assert feature_view_name is not None
             assert feature_view_version is not None
-            entity_type = "featuregroups"
-        else:
             entity_type = "featureview"
+        else:
+            entity_type = "featuregroups"
 
         self._feature_monitoring_config_api = FeatureMonitoringConfigApi(
             feature_store_id=feature_store_id,
@@ -330,7 +330,6 @@ class FeatureMonitoringConfigEngine:
             entity=entity,
             monitoring_window_config=config.detection_window_config,
             feature_name=config.feature_name,
-            check_existing=False,
         )
 
         if config.reference_window_config is not None:
@@ -338,7 +337,6 @@ class FeatureMonitoringConfigEngine:
                 entity=entity,
                 monitoring_window_config=config.reference_window_config,
                 feature_name=config.feature_name,
-                check_existing=True,
             )
         else:
             reference_stats = None
@@ -354,7 +352,6 @@ class FeatureMonitoringConfigEngine:
         entity,
         monitoring_window_config: MonitoringWindowConfig,
         feature_name: str,
-        check_existing: bool = False,
     ) -> Union[FeatureDescriptiveStatistics, float]:
         """Fetch the entity data based on monitoring window configuration and compute statistics.
 
@@ -362,7 +359,6 @@ class FeatureMonitoringConfigEngine:
             entity: FeatureStore: Feature store to fetch the entity to monitor.
             monitoring_window_config: MonitoringWindowConfig: Monitoring window config.
             feature_name: str: Name of the feature to monitor.
-            check_existing: bool: Whether to check for existing stats.
 
         Returns:
             Union[FeatureDescriptiveStatitics, float]: Descriptive statistics or a specific value
@@ -375,31 +371,23 @@ class FeatureMonitoringConfigEngine:
             # if window config type is specific value, there is no stats to compute
             return monitoring_window_config.specific_value
 
-        if check_existing:
-            start_time, end_time = self.get_window_start_end_times(
-                time_offset=monitoring_window_config.time_offset,
-                window_length=monitoring_window_config.window_length,
-            )
-            registered_stats = self._statistics_engine.get_by_feature_name_time_window_and_row_percentage(
-                entity,
-                feature_name,
-                start_time,
-                end_time,
-                monitoring_window_config.row_percentage,
-            )
-            if registered_stats is not None:
-                return registered_stats
+        # Check if statistics already exists
+        start_time, end_time = self.get_window_start_end_times(
+            time_offset=monitoring_window_config.time_offset,
+            window_length=monitoring_window_config.window_length,
+        )
+        registered_stats = self._statistics_engine.get_by_commit_time_window(
+            entity,
+            start_time,
+            end_time,
+            feature_name,
+            monitoring_window_config.row_percentage,
+        )
+        if registered_stats is not None:
+            # return existing statistics
+            return registered_stats.feature_descriptive_statistics[0]
 
         # Fetch the actual data for which to compute statistics based on row_percentage and time window
-        time_offset = self.time_range_str_to_time_delta(
-            monitoring_window_config.time_offset
-        )
-        window_length = self.time_range_str_to_time_delta(
-            monitoring_window_config.window_length
-        )
-        start_time, end_time = self.get_window_start_end_times(
-            time_offset, window_length
-        )
         entity_feature_df = (
             self.fetch_entity_data_based_on_time_window_and_row_percentage(
                 entity=entity,
@@ -411,16 +399,15 @@ class FeatureMonitoringConfigEngine:
         )
 
         # Compute statistics on the feature dataframe
-        descriptive_stats = self._statistics_engine.compute_single_feature_statistics(
+        sts = self._statistics_engine.compute_single_feature_statistics(
+            entity,
             entity_feature_df,
             feature_name,
+            start_time,
+            end_time,
+            monitoring_window_config.row_percentage,
         )
-        # set commit times and row percentage
-        descriptive_stats.start_time = start_time
-        descriptive_stats.end_time = end_time
-        descriptive_stats.row_percentage = monitoring_window_config.row_percentage
-
-        return descriptive_stats
+        return sts.feature_descriptive_statistics[0]
 
     def fetch_entity_data_based_on_time_window_and_row_percentage(
         self,
@@ -484,31 +471,39 @@ class FeatureMonitoringConfigEngine:
             time_offset=monitoring_window_config.time_offset,
             window_length=monitoring_window_config.window_length,
         )
-        return (
-            self._statistics_engine.get_by_feature_name_time_window_and_row_percentage(
-                entity,
-                feature_name,
-                start_time,
-                end_time,
-                monitoring_window_config.row_percentage,
-            )
+        return self._statistics_engine.get_by_commit_time_window(
+            entity,
+            start_time,
+            end_time,
+            feature_name,
+            monitoring_window_config.row_percentage,
         )
 
     def time_range_str_to_time_delta(self, time_range: str) -> timedelta:
         # Dummy method for now
         if time_range == "1m":
-            time_offset = timedelta(months=1)
+            time_offset = timedelta(days=30)  # TODO: there's no months parameter
         elif time_range == "1w":
             time_offset = timedelta(weeks=1)
         elif time_range == "1d":
             time_offset = timedelta(days=1)
         elif time_range == "1h":
             time_offset = timedelta(hours=1)
+        else:
+            raise ValueError(
+                "Unknown time range '"
+                + time_range
+                + "'. Valid time ranges are: 1m, 1w, 1d, 1h"
+            )
 
         return time_offset
 
     def get_window_start_end_times(self, time_offset, window_length):
+        time_offset_delta = self.time_range_str_to_time_delta(time_offset)
+        window_length_delta = self.time_range_str_to_time_delta(window_length)
+        start_time = datetime.now() - time_offset_delta
+        end_time = datetime.now() - time_offset_delta + window_length_delta
         return (
-            datetime.now() - time_offset,
-            datetime.now() - time_offset + window_length,
+            int(start_time.timestamp() * 1000),
+            int(end_time.timestamp() * 1000),
         )
