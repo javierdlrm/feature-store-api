@@ -30,9 +30,10 @@ class WindowConfigType:
     FIXED_TIME = "FIXED_TIME"
 
 
-class MonitoringWindowConfig:
-    _DEFAULT_ROW_PERCENTAGE = 1.0
+DEFAULT_ROW_PERCENTAGE = 1.0
 
+
+class MonitoringWindowConfig:
     def __init__(
         self,
         id: Optional[int] = None,
@@ -208,7 +209,7 @@ class MonitoringWindowConfig:
         self._specific_value = specific_value
 
     @property
-    def row_percentage(self) -> Optional[int]:
+    def row_percentage(self) -> Optional[float]:
         return self._row_percentage
 
     @row_percentage.setter
@@ -217,7 +218,6 @@ class MonitoringWindowConfig:
             self._window_config_type == WindowConfigType.SPECIFIC_VALUE
             or self._window_config_type == WindowConfigType.TRAINING_DATASET
         ) and row_percentage is not None:
-
             raise AttributeError(
                 "Row percentage can only be set for ROLLING_TIME and ALL_TIME"
                 " window config types."
@@ -229,6 +229,6 @@ class MonitoringWindowConfig:
                 raise ValueError("Row percentage must be a float between 0 and 1.")
             self._row_percentage = row_percentage
         elif row_percentage is None:
-            self._row_percentage = self._DEFAULT_ROW_PERCENTAGE
+            self._row_percentage = DEFAULT_ROW_PERCENTAGE
         else:
             raise TypeError("Row percentage must be a float between 0 and 1.")
