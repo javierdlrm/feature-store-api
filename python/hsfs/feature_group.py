@@ -1649,6 +1649,10 @@ class FeatureGroupBase:
         self._features = new_features
 
     def _are_statistics_missing(self, statistics: Statistics):
+        if self.statistics_config.enabled is False:
+            return False
+        if statistics is None:
+            return True
         if (
             self.statistics_config.histograms
             or self.statistics_config.correlations

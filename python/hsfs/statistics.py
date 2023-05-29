@@ -77,12 +77,19 @@ class Statistics:
     ) -> Optional[List[FeatureDescriptiveStatistics]]:
         if desc_statistics is None:
             return None
-        return [
-            fds
-            if isinstance(fds, FeatureDescriptiveStatistics)
-            else FeatureDescriptiveStatistics.from_response_json(fds)
-            for fds in desc_statistics
-        ]
+        elif isinstance(desc_statistics, FeatureDescriptiveStatistics):
+            return [desc_statistics]
+        elif isinstance(desc_statistics, dict) and "items" not in desc_statistics:
+            return [FeatureDescriptiveStatistics.from_response_json(desc_statistics)]
+        elif isinstance(desc_statistics, dict) and "items" in desc_statistics:
+            return [
+                FeatureDescriptiveStatistics.from_response_json(fds)
+                for fds in desc_statistics["items"]
+            ]
+        else:
+            raise ValueError(
+                "Descriptive statistics must be a FeatureDescriptiveStatistics object or a dictionary"
+            )
 
     def _parse_split_statistics(
         self,
