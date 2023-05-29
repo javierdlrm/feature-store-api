@@ -1647,7 +1647,7 @@ class FeatureGroupBase:
     @features.setter
     def features(self, new_features):
         self._features = new_features
-        
+
     def _are_statistics_missing(self, statistics: Statistics):
         if (
             self.statistics_config.histograms
@@ -2665,7 +2665,7 @@ class FeatureGroup(FeatureGroupBase):
         # Raises
             `hsfs.client.exceptions.RestAPIError`.
         """
-        return self._statistics_engine.get_by_commit_time_window(
+        return self._statistics_engine.get_by_time_window(
             self,
             start_time=from_commit_time,
             end_time=commit_time,
@@ -2905,7 +2905,7 @@ class FeatureGroup(FeatureGroupBase):
             self._time_travel_format is not None
             and self._time_travel_format.upper() == "HUDI"
         ):
-            return self._statistics_engine.get_by_commit_time_window(self)
+            return self._statistics_engine.get_by_time_window(self)
         return super().statistics
 
     @version.setter

@@ -262,16 +262,14 @@ class MonitoringWindowConfigEngine:
             monitoring_window_config=monitoring_window_config,
             use_event_time=use_event_time,
         )
-        if use_event_time is False:
-            registered_stats = self._statistics_engine.get_by_commit_time_window(
-                metadata_instance=entity,
-                start_time=start_time,
-                end_time=end_time,
-                feature_name=feature_name,
-                row_percentage=monitoring_window_config.row_percentage,
-            )
-        else:
-            registered_stats = self._statistics_engine.get_by_event_time_window()
+        registered_stats = self._statistics_engine.get_by_time_window(
+            metadata_instance=entity,
+            start_time=start_time,
+            end_time=end_time,
+            is_event_time=use_event_time,
+            feature_name=feature_name,
+            row_percentage=monitoring_window_config.row_percentage,
+        )
 
         if registered_stats is None:  # if statistics don't exist
             # Fetch the actual data for which to compute statistics based on row_percentage and time window
