@@ -86,6 +86,13 @@ class Statistics:
                 FeatureDescriptiveStatistics.from_response_json(fds)
                 for fds in desc_statistics["items"]
             ]
+        elif isinstance(desc_statistics, list):
+            return [
+                fds
+                if isinstance(fds, FeatureDescriptiveStatistics)
+                else FeatureDescriptiveStatistics.from_response_json(fds)
+                for fds in desc_statistics
+            ]
         else:
             raise ValueError(
                 "Descriptive statistics must be a FeatureDescriptiveStatistics object or a dictionary"
