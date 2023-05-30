@@ -270,19 +270,19 @@ class MonitoringWindowConfigEngine:
         )
         print(
             "[monitoring_window_config_engine] run_single_window_monitoring: start - "
-            + str(start_time)
-            if start_time is not None
-            else "None" + " , end - " + str(end_time)
-            if end_time is not None
-            else "None"
+            + (str(start_time) if start_time is not None else "None")
+            + " , end - "
+            + (str(end_time) if end_time is not None else "None")
             + ", row_percentage: "
-            + str(monitoring_window_config.row_percentage)
-            if monitoring_window_config.row_percentage is not None
-            else "None" + " , is_event_time: " + str(use_event_time)
-            if use_event_time is not None
-            else "None" + " , feature_name: " + str(feature_name)
-            if feature_name is not None
-            else "None"
+            + (
+                str(monitoring_window_config.row_percentage)
+                if monitoring_window_config.row_percentage is not None
+                else "None"
+            )
+            + " , is_event_time: "
+            + (str(use_event_time) if use_event_time is not None else "None")
+            + " , feature_name: "
+            + (str(feature_name) if feature_name is not None else "None")
         )
         registered_stats = self._statistics_engine.get_by_time_window(
             metadata_instance=entity,
