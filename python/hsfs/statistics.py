@@ -33,14 +33,13 @@ class Statistics:
         feature_descriptive_statistics=None,
         # feature group
         feature_group_id=None,
-        window_start_commit_id=None,
-        window_end_commit_id=None,
         # feature view
         feature_view_name=None,
         feature_view_version=None,
+        is_event_time=None,
+        # feature group and feature view
         window_start_time=None,
         window_end_time=None,
-        is_event_time=None,
         # training dataset
         training_dataset_id=None,
         split_statistics=None,
@@ -58,14 +57,13 @@ class Statistics:
         self._row_percentage = row_percentage
         # feature group
         self._feature_group_id = feature_group_id
-        self._window_start_commit_id = window_start_commit_id
-        self._window_end_commit_id = window_end_commit_id
         # feature view
         self._feature_view_name = feature_view_name
         self._feature_view_version = feature_view_version
+        self._is_event_time = is_event_time
+        # feature group and feature view
         self._window_start_time = window_start_time
         self._window_end_time = window_end_time
-        self._is_event_time = is_event_time
         # training dataset
         self._training_dataset_id = training_dataset_id
         self._split_statistics = self._parse_split_statistics(split_statistics)
@@ -129,8 +127,6 @@ class Statistics:
         _dict = {
             "commitTime": self._commit_time,
             "rowPercentage": self._row_percentage,
-            "windowStartCommitId": self._window_start_commit_id,
-            "windowEndCommitId": self._window_end_commit_id,
             "windowStartTime": self._window_start_time,
             "windowEndTime": self._window_end_time,
             "isEventTime": self._is_event_time,
@@ -182,14 +178,6 @@ class Statistics:
         return self._feature_group_id
 
     @property
-    def window_start_commit_id(self):
-        return self._window_start_commit_id
-
-    @property
-    def window_end_commit_id(self):
-        return self._window_end_commit_id
-
-    @property
     def feature_view_name(self):
         return self._feature_view_name
 
@@ -198,16 +186,16 @@ class Statistics:
         return self._feature_view_version
 
     @property
+    def is_event_time(self):
+        return self._is_event_time
+
+    @property
     def window_start_time(self):
         return self._window_start_time
 
     @property
     def window_end_time(self):
         return self._window_end_time
-
-    @property
-    def is_event_time(self):
-        return self._is_event_time
 
     @property
     def training_dataset_id(self):

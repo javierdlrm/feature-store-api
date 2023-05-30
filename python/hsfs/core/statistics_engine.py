@@ -78,7 +78,7 @@ class StatisticsEngine:
                 stats = statistics.Statistics(
                     commit_time=commit_time,
                     feature_descriptive_statistics=desc_stats,
-                    window_end_commit_id=feature_group_commit_id,
+                    window_end_time=feature_group_commit_id,
                 )
                 return self._save_statistics(stats, metadata_instance, feature_view_obj)
         else:
@@ -122,14 +122,13 @@ class StatisticsEngine:
                 feature_dataframe, feature_names, False, False, False
             )
             desc_stats = self._parse_deequ_statistics(stats_str)
+
             stats = statistics.Statistics(
                 commit_time=commit_time,
                 row_percentage=row_percentage,
                 feature_descriptive_statistics=desc_stats,
-                window_start_commit_id=start_time if not use_event_time else None,
-                window_end_commit_id=end_time if not use_event_time else None,
-                window_end_time=end_time if use_event_time else None,
-                window_start_time=start_time if use_event_time else None,
+                window_end_time=end_time,
+                window_start_time=start_time,
                 is_event_time=use_event_time,
             )
             return self._save_statistics(stats, metadata_instance, None)
