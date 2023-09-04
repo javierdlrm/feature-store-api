@@ -316,7 +316,9 @@ class TestTrainingDatasetEngine:
 
         # Assert
         assert mock_storage_connector_read.call_count == 1
-        assert mock_storage_connector_read.call_args[1]["path"] == "td_location/split"
+        assert (
+            mock_storage_connector_read.call_args[1]["path"] == "td_location/test/split"
+        )
 
     def test_query(self, mocker):
         # Arrange
