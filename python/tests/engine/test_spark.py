@@ -2597,6 +2597,7 @@ class TestSpark:
             feature_dataframes={"col_0": None, "col_1": None},
             write_options=None,
             save_mode=None,
+            path=td.location + "/" + td.name + "_" + str(td.version),
             to_df=False,
         )
 
@@ -2651,6 +2652,7 @@ class TestSpark:
             feature_dataframes={"col_0": None, "col_1": None},
             write_options=None,
             save_mode=None,
+            path=td.location + "/" + td.name + "_" + str(td.version),
             to_df=True,
         )
 
