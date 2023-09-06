@@ -3,15 +3,15 @@
     "version": "3.3.0-RC2",
     "title": "3.3.0-RC2",
     "aliases": [
-      "3.3"
+      "3.3",
+      "latest"
     ]
   },
   {
     "version": "3.1.0-RC1",
     "title": "3.1.0-RC1",
     "aliases": [
-      "3.1",
-      "latest"
+      "3.1"
     ]
   },
   {
