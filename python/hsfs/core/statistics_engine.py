@@ -88,6 +88,64 @@ class StatisticsEngine:
             # Python engine
             return engine.get_instance().profile_by_spark(metadata_instance)
 
+    def compute_and_save_monitoring_statistics(
+        self,
+        metadata_instance,
+        feature_dataframe,
+        start_time,
+        end_time,
+        row_percentage,
+        feature_name=None,
+        is_event_window=False,
+        transformed_with_version=None,
+    ) -> statistics.Statistics:
+        """Compute statistics for one or more features and send the result to Hopsworks.
+        Args:
+            metadata_instance: Union[FeatureGroup, TrainingDataset]. Metadata of the entity containing the data.
+            feature_dataframe: Spark or Pandas DataFrame to compute the statistics on.
+            start_time: int. Window start commit time
+            end_time: int. Window end commit time
+            row_percentage: float. Percentage of rows to include.
+            feature_name: Optional[Union[str, List[str]]]. Feature name or list of names to compute the statistics on. If not set, statistics are computed on all features.
+            is_event_window: Optional[bool]. If true, use event time to compute statistics. Defaults to False.
+            transformed_with_version: Optional[int]. Training dataset id whose transformation functions were applied before computing statistics
+        Returns:
+            Statistics. Statistics metadata containing a list of single feature descriptive statistics.
+        """
+        feature_names = []
+        if feature_name is None:
+            feature_names = feature_dataframe.columns
+        elif isinstance(feature_name, str):
+            feature_names = [feature_name]
+        elif isinstance(feature_name, list):
+            feature_names = feature_name
+
+        if engine.get_type() == "spark":
+            commit_time = int(float(datetime.datetime.now().timestamp()) * 1000)
+            stats_str = self.profile_statistics(
+                feature_dataframe, feature_names, False, False, False
+            )
+            desc_stats = self._parse_deequ_statistics(stats_str)
+
+            stats = statistics.Statistics(
+                commit_time=commit_time,
+                row_percentage=row_percentage,
+                feature_descriptive_statistics=desc_stats,
+                window_end_time=end_time,
+                window_start_time=start_time,
+                is_event_window=is_event_window,
+                transformed_with_version=transformed_with_version,
+            )
+            return self._save_statistics(stats, metadata_instance, None)
+        else:
+            # TODO: Only compute statistics with Spark at the moment. This method is expected to be called
+            # only through run_feature_monitoring(), which is the entrypoint of the feature monitoring job.
+            # Pending work for next sprint is to compute statistics on the Python client as well, as part of
+            # the deequ replacement work.
+            raise exceptions.FeatureStoreException(
+                "Descriptive statistics for feature monitoring cannot be computed from the Python engine."
+            )
+
     @staticmethod
     def profile_statistics_with_config(feature_dataframe, statistics_config) -> str:
         """Compute statistics on a feature DataFrame based on a given configuration.
@@ -288,9 +346,14 @@ class StatisticsEngine:
     def get_by_time_window(
         self,
         metadata_instance,
+        # feature group and feature view
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         feature_names: Optional[List[str]] = None,
+        row_percentage: Optional[float] = None,
+        # feature view
+        is_event_window: Optional[bool] = None,  # True if event times
+        computation_time: Optional[float] = None,  # only for event windows
     ) -> Union[statistics.Statistics, List[statistics.Statistics], None]:
         """Get the statistics of an entity based on a commit time window.
         Args:
@@ -298,6 +361,11 @@ class StatisticsEngine:
             start_time: int: Window start commit time
             end_time: int: Window end commit time
             feature_names: List[str]. List of feature names of which statistics are retrieved.
+            row_percentage: float. Percentage of feature values used during statistics computation
+            is_event_window: bool: Whether to use event time or ingestion time.
+                Feature View only. Defaults to False.
+            computation_time: float. Timestamp or computation time when statistics where computed.
+                Feature View only. Defaults to most recent.
         Returns:
             Statistics:  Statistics metadata containing a list of single feature descriptive statistics.
         """
@@ -309,6 +377,9 @@ class StatisticsEngine:
                 start_time=start_time,
                 end_time=end_time,
                 feature_names=feature_names,
+                row_percentage=row_percentage,
+                is_event_window=is_event_window,
+                computation_time=computation_time,
             )
         except exceptions.RestAPIError as e:
             if (

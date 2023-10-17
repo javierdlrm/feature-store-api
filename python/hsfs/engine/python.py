@@ -806,6 +806,9 @@ class Engine:
         """Wrapper around save_dataframe in order to provide no-op."""
         pass
 
+    def create_empty_df(self, schema):
+        return pd.DataFrame(columns=[schema])
+
     def get_job_url(self, href: str):
         """Use the endpoint returned by the API to construct the UI url for jobs
 

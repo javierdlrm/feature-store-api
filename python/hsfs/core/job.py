@@ -30,7 +30,8 @@ class Job:
         job_type,
         creator,
         executions=None,
-        type=None,
+        type=None,  # TODO: Is this actually used?
+        job_schedule=None,
         href=None,
         expand=None,
         items=None,
@@ -39,10 +40,14 @@ class Job:
     ):
         self._id = id
         self._name = name
-        self._executions = executions
-        self._href = href
+        self._creation_time = creation_time
         self._config = config
-
+        self._job_type = job_type
+        self._creator = creator
+        self._executions = executions
+        self._type = type
+        self._job_schedule = job_schedule
+        self._href = href
         self._job_api = job_api.JobApi()
 
     @classmethod
@@ -64,6 +69,10 @@ class Job:
     @property
     def executions(self):
         return self._executions
+
+    @property
+    def job_schedule(self):
+        return self._job_schedule
 
     @property
     def href(self):
