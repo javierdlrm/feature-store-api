@@ -1102,9 +1102,9 @@ class Engine:
 
         return path
 
-    def create_empty_df(self, streaming_df):
+    def create_empty_df(self, schema):
         return SQLContext(self._spark_context).createDataFrame(
-            self._spark_context.emptyRDD(), streaming_df.schema
+            self._spark_context.emptyRDD(), schema
         )
 
     @staticmethod
@@ -1120,9 +1120,9 @@ class Engine:
 
         if not using_hudi:
             return spark_type.simpleString()
-        elif type(spark_type) == ByteType:
+        elif type(spark_type) is ByteType:
             return "int"
-        elif type(spark_type) == ShortType:
+        elif type(spark_type) is ShortType:
             return "int"
         elif type(spark_type) in [
             BooleanType,

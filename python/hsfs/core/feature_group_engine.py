@@ -259,7 +259,7 @@ class FeatureGroupEngine(feature_group_base_engine.FeatureGroupBaseEngine):
                 online_write_options = write_options
                 engine.get_instance().save_dataframe(
                     feature_group,
-                    engine.get_instance().create_empty_df(dataframe),
+                    engine.get_instance().create_empty_df(dataframe.schema),
                     hudi_engine.HudiEngine.HUDI_BULK_INSERT
                     if feature_group.time_travel_format == "HUDI"
                     else None,
