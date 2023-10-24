@@ -17,10 +17,12 @@
 import datetime
 import json
 import warnings
+from typing import List, Union, Optional
 
 from hsfs import engine, statistics, util, split_statistics
 from hsfs.client import exceptions
-from hsfs.core import statistics_api
+from hsfs.core import statistics_api, job
+from hsfs.core.feature_descriptive_statistics import FeatureDescriptiveStatistics
 
 
 class StatisticsEngine:
@@ -29,18 +31,27 @@ class StatisticsEngine:
             feature_store_id, entity_type
         )
 
-    def compute_statistics(
+    def compute_and_save_statistics(
         self,
         metadata_instance,
         feature_dataframe=None,
         feature_group_commit_id=None,
         feature_view_obj=None,
-    ):
-        """Compute statistics for a dataframe and send the result json to Hopsworks."""
+    ) -> Union[statistics.Statistics, job.Job]:
+        """Compute statistics for a dataframe and send the result json to Hopsworks.
+        Args:
+            metadata_instance: Union[FeatureGroup, TrainingDataset]. Metadata of the entity containing the data.
+            feature_dataframe: Spark or Pandas DataFrame to compute the statistics on.
+            feature_group_commit_id: int. Feature group commit id.
+            feature_view_obj: FeatureView. Metadata of the feature view, used when computing statistics for a Training Dataset.
+        Returns:
+            Union[Statistics, Job]. If running on Spark, statistics metadata containing a list of single feature descriptive statistics.
+                                    Otherwise, Spark job metadata used to compute the statistics.
+        """
         if engine.get_type() == "spark" or feature_view_obj is not None:
             # If the feature dataframe is None, then trigger a read on the metadata instance
             # We do it here to avoid making a useless request when using the Python engine
-            # and calling compute_statistics
+            # and calling compute_and_save_statistics
             if feature_dataframe is None:
                 if feature_group_commit_id is not None:
                     feature_dataframe = (
@@ -56,21 +67,62 @@ class StatisticsEngine:
                     feature_dataframe = metadata_instance.read()
 
             commit_time = int(float(datetime.datetime.now().timestamp()) * 1000)
-
-            content_str = self.profile_statistics(metadata_instance, feature_dataframe)
-            if content_str:
+            print(
+                "[StatisticsEngine] compute_and_save_statistics: feature_group_commit_id: "
+                + str(feature_group_commit_id or "None")
+                + ", commit time: "
+                + str(commit_time)
+            )
+            stats_str = self.profile_statistics_with_config(
+                feature_dataframe, metadata_instance.statistics_config
+            )
+            desc_stats = self._parse_deequ_statistics(stats_str)
+            if desc_stats:
                 stats = statistics.Statistics(
                     commit_time=commit_time,
-                    content=content_str,
-                    feature_group_commit_id=feature_group_commit_id,
+                    feature_descriptive_statistics=desc_stats,
+                    window_end_time=feature_group_commit_id,
                 )
-                self._save_statistics(stats, metadata_instance, feature_view_obj)
+                return self._save_statistics(stats, metadata_instance, feature_view_obj)
         else:
             # Python engine
-            engine.get_instance().profile_by_spark(metadata_instance)
+            return engine.get_instance().profile_by_spark(metadata_instance)
 
     @staticmethod
-    def profile_statistics(metadata_instance, feature_dataframe):
+    def profile_statistics_with_config(feature_dataframe, statistics_config) -> str:
+        """Compute statistics on a feature DataFrame based on a given configuration.
+        Args:
+            feature_dataframe: Spark or Pandas DataFrame to compute the statistics on.
+            statistics_config: StatisticsConfig. Configuration for the statistics to be computed.
+        Returns:
+            str. Serialized features statistics.
+        """
+        print(
+            "[StatisticsEngine] profile_statistics_with_config - "
+            + str(statistics_config)
+        )
+        return StatisticsEngine.profile_statistics(
+            feature_dataframe,
+            statistics_config.columns,
+            statistics_config.correlations,
+            statistics_config.histograms,
+            statistics_config.exact_uniqueness,
+        )
+
+    @staticmethod
+    def profile_statistics(
+        feature_dataframe, columns, correlations, histograms, exact_uniqueness
+    ) -> str:
+        """Compute statistics on a feature DataFrame.
+        Args:
+            feature_dataframe: Spark or Pandas DataFrame to compute the statistics on.
+            columns: List[str]. List of feature names to compute the statistics on.
+            correlations: bool. Whether to compute correlations or not.
+            histograms: bool. Whether to compute histograms or not.
+            exact_uniqueness: bool. Whether to compute exact uniqueness values or not.
+        Returns:
+            str. Serialized features statistics.
+        """
         if len(feature_dataframe.head(1)) == 0:
             warnings.warn(
                 "There is no data in the entity that you are trying to compute "
@@ -78,18 +130,202 @@ class StatisticsEngine:
                 "to the online storage of a feature group.",
                 category=util.StatisticsWarning,
             )
-            return "{}"
+            # if empty data, set count to 0 and return
+            col_stats = [{"column": col_name, "count": 0} for col_name in columns]
+            return json.dumps({"columns": col_stats})
+        print("[StatisticsEngine] profile_statistics")
         return engine.get_instance().profile(
-            feature_dataframe,
-            metadata_instance.statistics_config.columns,
-            metadata_instance.statistics_config.correlations,
-            metadata_instance.statistics_config.histograms,
-            metadata_instance.statistics_config.exact_uniqueness,
+            feature_dataframe, columns, correlations, histograms, exact_uniqueness
         )
 
-    def profile_transformation_fn_statistics(
-        self, feature_dataframe, columns, label_encoder_features
+    def compute_and_save_split_statistics(
+        self, td_metadata_instance, feature_view_obj=None, feature_dataframes=None
+    ) -> statistics.Statistics:
+        """Compute statistics on Training Dataset splits
+
+        Args:
+            td_metadata_instance: TrainingDataset. Training Dataset containing the splits.
+            feature_view_obj: FeatureView. Metadata of the feature view used to create the Training Dataset. This parameter is optional.
+            feature_dataframes: Spark or Pandas DataFrames containing the splits to compute the statistics on.
+
+        Returns:
+            Statistics. Statistics metadata containing a list of single feature descriptive statistics.
+        """
+        statistics_of_splits = []
+        print(
+            "[StatisticsEngine] compute_and_save_split_statistics: feature_view: "
+            + ("not null" if feature_view_obj is not None else "null")
+        )
+        for split in td_metadata_instance.splits:
+            split_name = split.name
+            print(
+                "[StatisticsEngine] compute_and_save_split_statistics: -- split name: "
+                + split_name
+            )
+            stats_str = self.profile_statistics_with_config(
+                (
+                    feature_dataframes.get(split_name)
+                    if feature_dataframes
+                    else td_metadata_instance.read(split_name)
+                ),
+                td_metadata_instance.statistics_config,
+            )
+            desc_stats = self._parse_deequ_statistics(stats_str)
+            statistics_of_splits.append(
+                split_statistics.SplitStatistics(
+                    name=split_name,
+                    feature_descriptive_statistics=desc_stats,
+                )
+            )
+        commit_time = int(float(datetime.datetime.now().timestamp()) * 1000)
+        stats = statistics.Statistics(
+            commit_time=commit_time, split_statistics=statistics_of_splits
+        )
+        return self._save_statistics(stats, td_metadata_instance, feature_view_obj)
+
+    def compute_transformation_fn_statistics(
+        self,
+        td_metadata_instance,
+        columns,
+        label_encoder_features,
+        feature_dataframe=None,
+        feature_view_obj=None,
+    ) -> statistics.Statistics:
+        """Compute statistics for transformation functions.
+        Args:
+            td_metadata_instance: TrainingDataset. Training Dataset containing the splits.
+            columns: List[str]. List of feature names where transformation functions are applied.
+            label_encoder_features: List[str]. List of label encoded feature names.
+            feature_dataframe: Spark or Pandas DataFrame to compute the statistics on. This parameter is optional.
+            feature_view_obj: FeatureView. Metadata of the feature view used to create the Training Dataset. This parameter is optional.
+        Returns:
+            Statistics. Statistics metadata containing a list of single feature descriptive statistics.
+        """
+        commit_time = int(float(datetime.datetime.now().timestamp()) * 1000)
+        stats_str = self._profile_transformation_fn_statistics(
+            feature_dataframe, columns, label_encoder_features
+        )
+        desc_stats = self._parse_deequ_statistics(stats_str)
+        stats = statistics.Statistics(
+            commit_time=commit_time,
+            feature_descriptive_statistics=desc_stats,
+            for_transformation=True,
+        )
+        return self._save_statistics(stats, td_metadata_instance, feature_view_obj)
+
+    def get(
+        self,
+        metadata_instance,
+        feature_names: Optional[List[str]] = None,
+        computation_time: Optional[float] = None,
+        for_transformation: Optional[bool] = None,
+        training_dataset_version: Optional[int] = None,
+    ) -> statistics.Statistics:
+        """Get statistics of an entity computed at a specific time.
+           If the computation time is not provided, the most recently computed statistics will be retrieved.
+
+        Args:
+            metadata_instance: Union[FeatureGroup, TrainingDataset]. Metadata of the entity containing the data.
+            feature_names: List[str]. List of feature names of which statistics are retrieved.
+            computation_time: float. Timestamp or computation time when statistics where computed.
+            for_transformation: bool. Whether the statistics are used in transformation functions or not.
+            training_dataset_version: int. Version of the training dataset on which statistics were computed.
+        Returns:
+            Statistics. Statistics metadata containing a list of single feature descriptive statistics.
+        """
+        computation_timestamp = util.convert_event_time_to_timestamp(computation_time)
+        try:
+            return self._statistics_api.get(
+                metadata_instance,
+                feature_names=feature_names,
+                computation_time=computation_timestamp,
+                for_transformation=for_transformation,
+                training_dataset_version=training_dataset_version,
+            )
+        except exceptions.RestAPIError as e:
+            if (
+                # statistics not found
+                e.response.json().get("errorCode", "") == 270226
+                and e.response.status_code == 404
+            ):
+                return None
+            raise e
+
+    def get_all(
+        self,
+        metadata_instance,
+        feature_names: Optional[List[str]] = None,
+        computation_time: Optional[float] = None,
+        training_dataset_version: Optional[int] = None,
     ):
+        """Get all statistics of an entity computed before a specific time.
+           If the computation time is not provided, all the statistics will be retrieved.
+
+        Args:
+            metadata_instance: Union[FeatureGroup, TrainingDataset]. Metadata of the entity containing the data.
+            feature_names: List[str]. List of feature names of which statistics are retrieved.
+            computation_time: float. Timestamp or computation time when statistics where computed.
+            training_dataset_version: int. Version of the training dataset on which statistics were computed.
+        Returns:
+            Statistics. Statistics metadata containing a list of single feature descriptive statistics.
+        """
+        try:
+            return self._statistics_api.get_all(
+                metadata_instance,
+                feature_names=feature_names,
+                computation_time=computation_time,
+                training_dataset_version=training_dataset_version,
+            )
+        except exceptions.RestAPIError as e:
+            if (
+                # statistics not found
+                e.response.json().get("errorCode", "") == 270226
+                and e.response.status_code == 404
+            ):
+                return None
+            raise e
+
+    def get_by_time_window(
+        self,
+        metadata_instance,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        feature_names: Optional[List[str]] = None,
+    ) -> Union[statistics.Statistics, List[statistics.Statistics], None]:
+        """Get the statistics of an entity based on a commit time window.
+        Args:
+            metadata_instance: Union[FeatureGroup]: Metadata of the entity containing the data.
+            start_time: int: Window start commit time
+            end_time: int: Window end commit time
+            feature_names: List[str]. List of feature names of which statistics are retrieved.
+        Returns:
+            Statistics:  Statistics metadata containing a list of single feature descriptive statistics.
+        """
+        start_time = util.convert_event_time_to_timestamp(start_time)
+        end_time = util.convert_event_time_to_timestamp(end_time)
+        try:
+            return self._statistics_api.get(
+                metadata_instance,
+                start_time=start_time,
+                end_time=end_time,
+                feature_names=feature_names,
+            )
+        except exceptions.RestAPIError as e:
+            if (
+                # statistics not found
+                e.response.json().get("errorCode", "") == 270226
+                and e.response.status_code == 404
+            ) or (
+                # commits not found
+                e.response.json().get("errorCode", "") == 270225
+                and e.response.status_code == 400
+            ):
+                return None
+            raise e
+
+    def _profile_transformation_fn_statistics(
+        self, feature_dataframe, columns, label_encoder_features
+    ) -> str:
         if (
             engine.get_type() == "spark"
             and len(feature_dataframe.select(*columns).head(1)) == 0
@@ -102,104 +338,26 @@ class StatisticsEngine:
                 "statistics for. A possible cause might be that you inserted only data "
                 "to the online storage of a feature group."
             )
-        content_str = engine.get_instance().profile(
+        stats_str = engine.get_instance().profile(
             feature_dataframe, columns, False, True, False
         )
 
-        # add unique value profile to String type columns
-        return self.profile_unique_values(
-            feature_dataframe, label_encoder_features, content_str
+        # add unique values profile to column stats
+        return self._profile_unique_values(
+            feature_dataframe, label_encoder_features, stats_str
         )
 
-    def register_split_statistics(
-        self, td_metadata_instance, feature_view_obj=None, feature_dataframes=None
-    ):
-        statistics_of_splits = []
-        for split in td_metadata_instance.splits:
-            split_name = split.name
-            stat_content = self.profile_statistics(
-                td_metadata_instance,
-                (
-                    feature_dataframes.get(split_name)
-                    if feature_dataframes
-                    else td_metadata_instance.read(split_name)
-                ),
-            )
-            statistics_of_splits.append(
-                split_statistics.SplitStatistics(
-                    split_name,
-                    stat_content if stat_content else "{}",
-                )
-            )
+    def _profile_unique_values(
+        self, feature_dataframe, label_encoder_features, stats
+    ) -> str:
+        if isinstance(stats, str):
+            stats = json.loads(stats)
+        if not stats:
+            stats = {"columns": []}
 
-        commit_time = int(float(datetime.datetime.now().timestamp()) * 1000)
-        stats = statistics.Statistics(
-            commit_time=commit_time, split_statistics=statistics_of_splits
-        )
-
-        self._save_statistics(stats, td_metadata_instance, feature_view_obj)
-        return stats
-
-    def compute_transformation_fn_statistics(
-        self,
-        td_metadata_instance,
-        columns,
-        label_encoder_features,
-        feature_dataframe=None,
-        feature_view_obj=None,
-    ):
-        commit_time = int(float(datetime.datetime.now().timestamp()) * 1000)
-        content_str = self.profile_transformation_fn_statistics(
-            feature_dataframe, columns, label_encoder_features
-        )
-        stats = statistics.Statistics(
-            commit_time=commit_time,
-            content=content_str,
-            for_transformation=True,
-        )
-        self._save_statistics(stats, td_metadata_instance, feature_view_obj)
-        return stats
-
-    def get_last(
-        self, metadata_instance, for_transformation=False, training_dataset_version=None
-    ):
-        """Get the most recent Statistics of an entity."""
-        return self._statistics_api.get_last(
-            metadata_instance, for_transformation, training_dataset_version
-        )
-
-    def get(
-        self,
-        metadata_instance,
-        commit_time,
-        for_transformation=False,
-        training_dataset_version=None,
-    ):
-        """Get Statistics with the specified commit time of an entity."""
-        commit_timestamp = util.convert_event_time_to_timestamp(commit_time)
-        return self._statistics_api.get(
-            metadata_instance,
-            commit_timestamp,
-            for_transformation,
-            training_dataset_version,
-        )
-
-    def _save_statistics(self, stats, td_metadata_instance, feature_view_obj):
-        if feature_view_obj:
-            self._statistics_api.post(
-                feature_view_obj, stats, td_metadata_instance.version
-            )
-        else:
-            self._statistics_api.post(td_metadata_instance, stats, None)
-
-    @staticmethod
-    def profile_unique_values(feature_dataframe, label_encoder_features, content_str):
-        # parsing JSON string:
-        content_dict = json.loads(content_str)
-        if not content_dict:
-            content_dict = {"columns": []}
+        stats_dict = {col_stats["column"]: col_stats for col_stats in stats["columns"]}
         for column in label_encoder_features:
-            unique_values = {
+            col_stats_unique_values = {
                 "column": column,
                 "unique_values": [
                     value
@@ -208,6 +366,40 @@ class StatisticsEngine:
                     )
                 ],
             }
-            content_dict["columns"].append(unique_values)
-        # the result is a JSON string:
-        return json.dumps(content_dict)
+            if column in stats_dict:
+                stats_dict[column].update(col_stats_unique_values)
+            else:
+                stats_dict[column] = col_stats_unique_values
+
+        stats["columns"] = list(stats_dict.values())
+        return json.dumps(stats)  # the result is a JSON string
+
+    def _save_statistics(
+        self, stats, metadata_instance, feature_view_obj
+    ) -> statistics.Statistics:
+        # metadata_instance can be feature group or training dataset
+        if feature_view_obj:
+            stats = self._statistics_api.post(
+                feature_view_obj,
+                stats=stats,
+                training_dataset_version=metadata_instance.version,
+            )
+        else:
+            stats = self._statistics_api.post(
+                metadata_instance, stats=stats, training_dataset_version=None
+            )
+        return stats
+
+    def _parse_deequ_statistics(self, stats) -> List[FeatureDescriptiveStatistics]:
+        if stats is None:
+            warnings.warn(
+                "There is no Deequ statistics to deserialize. A possible cause might be that Deequ did not succeed in the statistics computation.",
+                category=util.StatisticsWarning,
+            )
+            return None
+        if isinstance(stats, str):
+            stats = json.loads(stats)
+        return [
+            FeatureDescriptiveStatistics.from_deequ_json(col_stats)
+            for col_stats in stats["columns"]
+        ]
