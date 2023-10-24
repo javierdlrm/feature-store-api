@@ -210,6 +210,7 @@ class StatisticsApi:
             + (",".join(feature_names) if feature_names is not None else "none"),
         )
 
+        # response is either a single item or not found exception
         return statistics.Statistics.from_response_json(
             _client._send_request("GET", path_params, query_params, headers=headers)
         )

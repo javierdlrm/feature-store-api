@@ -311,9 +311,6 @@ class StatisticsEngine:
                 feature_names=feature_names,
             )
         except exceptions.RestAPIError as e:
-            print("~~~~~~ CATCH exception ~~~~~~~~~")
-            print(e.response.json())
-            print(e.response.status_code)
             if (
                 # statistics not found
                 e.response.json().get("errorCode", "") == 270226
@@ -323,7 +320,6 @@ class StatisticsEngine:
                 e.response.json().get("errorCode", "") == 270225
                 and e.response.status_code == 400
             ):
-                print("~~~~~~ RETURN NONE ~~~~~~~~~")
                 return None
             raise e
 
