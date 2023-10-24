@@ -627,7 +627,7 @@ class VectorServer:
                     "or `feature_view.init_batch_scoring(version)` to pass the training dataset version."
                     "Training data can be created by `feature_view.create_training_data` or `feature_view.get_training_data`."
                 )
-            td_tffn_stats = self._feature_view_engine._statistics_engine.get_last(
+            td_tffn_stats = self._feature_view_engine._statistics_engine.get(
                 entity,
                 for_transformation=True,
                 training_dataset_version=self._training_dataset_version,
@@ -641,7 +641,9 @@ class VectorServer:
         transformation_fns = (
             self._transformation_function_engine.populate_builtin_attached_fns(
                 transformation_functions,
-                td_tffn_stats.content if td_tffn_stats is not None else None,
+                td_tffn_stats.feature_descriptive_statistics
+                if td_tffn_stats is not None
+                else None,
             )
         )
         return transformation_fns

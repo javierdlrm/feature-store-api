@@ -37,6 +37,7 @@ from hsfs.core import (
     feature_view_engine,
     transformation_function_engine,
     vector_server,
+    statistics_engine,
 )
 from hsfs.transformation_function import TransformationFunction
 from hsfs.statistics_config import StatisticsConfig
@@ -69,6 +70,7 @@ class FeatureView:
         self._id = id
         self._query = query
         self._featurestore_id = featurestore_id
+        self._feature_store_id = featurestore_id  # for consistency with feature group
         self._feature_store_name = featurestore_name
         self._version = version
         self._description = description
@@ -96,6 +98,10 @@ class FeatureView:
         self._serving_keys = serving_keys
         self._prefix_serving_key_map = {}
         self._vector_db_client = None
+
+        self._statistics_engine = statistics_engine.StatisticsEngine(
+            featurestore_id, self.ENTITY_TYPE
+        )
 
     def delete(self):
         """Delete current feature view, all associated metadata and training data.
@@ -1392,6 +1398,8 @@ class FeatureView:
                 For spark engine: Dictionary of read options for Spark.
                 When using the `python` engine, write_options can contain the
                 following entries:
+                * key `use_spark` and value `True` to materialize training dataset
+                  with Spark instead of [ArrowFlight Server](https://docs.hopsworks.ai/latest/setup_installation/common/arrow_flight_duckdb/).
                 * key `spark` and value an object of type
                 [hsfs.core.job_configuration.JobConfiguration](../job_configuration)
                   to configure the Hopsworks Job used to compute the training dataset.
@@ -1673,6 +1681,8 @@ class FeatureView:
                 For spark engine: Dictionary of read options for Spark.
                 When using the `python` engine, write_options can contain the
                 following entries:
+                * key `use_spark` and value `True` to materialize training dataset
+                  with Spark instead of [ArrowFlight Server](https://docs.hopsworks.ai/latest/setup_installation/common/arrow_flight_duckdb/).
                 * key `spark` and value an object of type
                 [hsfs.core.job_configuration.JobConfiguration](../job_configuration)
                   to configure the Hopsworks Job used to compute the training dataset.
@@ -1753,7 +1763,8 @@ class FeatureView:
     def recreate_training_dataset(
         self,
         training_dataset_version: int,
-        write_options: Optional[Dict[Any, Any]] = {},
+        statistics_config: Optional[Union[StatisticsConfig, bool, dict]] = None,
+        write_options: Optional[Dict[Any, Any]] = None,
         spine: Optional[
             Union[
                 pd.DataFrame,
@@ -1790,10 +1801,19 @@ class FeatureView:
 
         # Arguments
             training_dataset_version: training dataset version
-            read_options: Additional options as key/value pairs to pass to the execution engine.
+            statistics_config: A configuration object, or a dictionary with keys
+                "`enabled`" to generally enable descriptive statistics computation for
+                this feature group, `"correlations`" to turn on feature correlation
+                computation and `"histograms"` to compute feature value frequencies. The
+                values should be booleans indicating the setting. To fully turn off
+                statistics computation pass `statistics_config=False`. Defaults to
+                `None` and will compute only descriptive statistics.
+            write_options: Additional options as key/value pairs to pass to the execution engine.
                 For spark engine: Dictionary of read options for Spark.
                 When using the `python` engine, write_options can contain the
                 following entries:
+                * key `use_spark` and value `True` to materialize training dataset
+                  with Spark instead of [ArrowFlight Server](https://docs.hopsworks.ai/latest/setup_installation/common/arrow_flight_duckdb/).
                 * key `spark` and value an object of type
                 [hsfs.core.job_configuration.JobConfiguration](../job_configuration)
                   to configure the Hopsworks Job used to compute the training dataset.
@@ -1813,7 +1833,11 @@ class FeatureView:
                 that was launched to create the training dataset.
         """
         td, td_job = self._feature_view_engine.recreate_training_dataset(
-            self, training_dataset_version, write_options, spine
+            self,
+            training_dataset_version=training_dataset_version,
+            statistics_config=statistics_config,
+            user_write_options=write_options or {},
+            spine=spine,
         )
         return td_job
 

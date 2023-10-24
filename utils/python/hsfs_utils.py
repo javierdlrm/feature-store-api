@@ -77,6 +77,7 @@ def insert_fg(spark: SparkSession, job_conf: Dict[Any, Any]) -> None:
 
 
 def create_td(job_conf: Dict[Any, Any]) -> None:
+    print("[hsfs_utils] create_td")
     # Extract the feature store handle
     feature_store = job_conf.pop("feature_store")
     fs = get_feature_store_handle(feature_store)
@@ -93,6 +94,7 @@ def create_td(job_conf: Dict[Any, Any]) -> None:
 
 
 def create_fv_td(job_conf: Dict[Any, Any]) -> None:
+    print("[hsfs_utils] create_fv_td")
     # Extract the feature store handle
     feature_store = job_conf.pop("feature_store")
     fs = get_feature_store_handle(feature_store)
