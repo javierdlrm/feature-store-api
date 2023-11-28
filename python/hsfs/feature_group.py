@@ -1143,7 +1143,7 @@ class FeatureGroupBase:
             ge_type=ge_type,
         )
 
-    def _get_feature_monitoring_configs(
+    def get_feature_monitoring_configs(
         self,
         name: Optional[str] = None,
         feature_name: Optional[str] = None,
@@ -1199,7 +1199,7 @@ class FeatureGroupBase:
             config_id=config_id,
         )
 
-    def _get_feature_monitoring_history(
+    def get_feature_monitoring_history(
         self,
         config_name: Optional[str] = None,
         config_id: Optional[int] = None,
@@ -1260,7 +1260,7 @@ class FeatureGroupBase:
             with_statistics=with_statistics,
         )
 
-    def _create_statistics_monitoring(
+    def create_statistics_monitoring(
         self,
         name: str,
         job_frequency: str = "DAILY",
@@ -1278,7 +1278,7 @@ class FeatureGroupBase:
             # fetch feature group
             fg = fs.get_feature_group(name="my_feature_group", version=1)
             # enable statistics monitoring
-            my_config = fg._create_statistics_monitoring(
+            my_config = fg.create_statistics_monitoring(
                 name="my_config",
                 job_frequency="DAILY",
                 start_date_time="2021-01-01 00:00:00",
@@ -1328,7 +1328,7 @@ class FeatureGroupBase:
             cron_expression=cron_expression,
         )
 
-    def _create_feature_monitoring(
+    def create_feature_monitoring(
         self,
         name: str,
         feature_name: str,
@@ -1346,7 +1346,7 @@ class FeatureGroupBase:
             # fetch feature group
             fg = fs.get_feature_group(name="my_feature_group", version=1)
             # enable feature monitoring
-            my_config = fg._create_feature_monitoring(
+            my_config = fg.create_feature_monitoring(
                 name="my_monitoring_config",
                 feature_name="my_feature",
                 job_frequency="DAILY",

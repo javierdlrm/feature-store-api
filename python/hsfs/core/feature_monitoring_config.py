@@ -194,7 +194,7 @@ class FeatureMonitoringConfig:
             # fetch your feature group or feature view
             fg = fs.get_feature_group(name="my_feature_group", version=1)
             # Compute statistics on a regular basis
-            fg._create_statistics_monitoring(
+            fg.create_statistics_monitoring(
                 name="regular_stats",
                 job_frequency="DAILY",
             ).with_detection_window(
@@ -203,7 +203,7 @@ class FeatureMonitoringConfig:
                 row_percentage=0.1,
             ).save()
             # Compute and compare statistics
-            fg._create_feature_monitoring(
+            fg.create_feature_monitoring(
                 name="regular_stats",
                 feature_name="my_feature",
                 job_frequency="DAILY",
@@ -245,7 +245,7 @@ class FeatureMonitoringConfig:
             # fetch your feature group or feature view
             fg = fs.get_feature_group(name="my_feature_group", version=1)
             # Setup feature monitoring and a detection window
-            my_monitoring_config = fg._create_feature_monitoring(...).with_detection_window(...)
+            my_monitoring_config = fg.create_feature_monitoring(...).with_detection_window(...)
             # Statistics computed on a rolling time window, e.g. same day last week
             my_monitoring_config.with_reference_window(
                 time_offset="1w",
@@ -281,7 +281,7 @@ class FeatureMonitoringConfig:
             # fetch your feature group or feature view
             fg = fs.get_feature_group(name="my_feature_group", version=1)
             # Setup feature monitoring and a detection window
-            my_monitoring_config = fg._create_feature_monitoring(...).with_detection_window(...)
+            my_monitoring_config = fg.create_feature_monitoring(...).with_detection_window(...)
             # Simplest reference window is a specific value
             my_monitoring_config.with_reference_value(
                 value=0.0,
@@ -311,7 +311,7 @@ class FeatureMonitoringConfig:
             # fetch your feature group or feature view
             fg = fs.get_feature_group(name="my_feature_group", version=1)
             # Setup feature monitoring and a detection window
-            my_monitoring_config = fg._create_feature_monitoring(...).with_detection_window(...)
+            my_monitoring_config = fg.create_feature_monitoring(...).with_detection_window(...)
             # Only for feature views: Compare to the statistics computed for one of your training datasets
             # particularly useful if it has been used to train a model currently in production
             my_monitoring_config.with_reference_training_dataset(
@@ -344,7 +344,7 @@ class FeatureMonitoringConfig:
             # fetch your feature group or feature view
             fg = fs.get_feature_group(name="my_feature_group", version=1)
             # Setup feature monitoring, a detection window and a reference window
-            my_monitoring_config = fg._create_feature_monitoring(
+            my_monitoring_config = fg.create_feature_monitoring(
                 ...
             ).with_detection_window(...).with_reference_window(...)
             # Choose a metric and set a threshold for the difference
@@ -382,7 +382,7 @@ class FeatureMonitoringConfig:
             # fetch your feature group or feature view
             fg = fs.get_feature_group(name="my_feature_group", version=1)
             # Setup feature monitoring and a detection window
-            my_monitoring_config = fg._create_statistics_monitoring(
+            my_monitoring_config = fg.create_statistics_monitoring(
                 name="my_monitoring_config",
             ).save()
             ```
