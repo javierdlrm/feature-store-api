@@ -392,11 +392,11 @@ class MonitoringWindowConfigEngine:
                 and e.response.status_code == 404
             ):
                 # This error means no data for those particular commits
-                # TODO: Improve this
+                # TODO: Creating an empty Spark DataFrame requires a proper [SchemaType(name, type)]
                 # entity_df = engine.get_instance().create_empty_df(
                 #     [feat.name for feat in entity.schema]
                 # )
-                from pandas import pd
+                import pandas as pd
 
                 return pd.DataFrame(columns=[feat.name for feat in entity.schema])
             else:

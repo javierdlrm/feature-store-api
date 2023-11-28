@@ -4527,7 +4527,7 @@ class TestSpark:
 
         # Act
         result = spark_engine.create_empty_df(
-            streaming_df=spark_df,
+            schema=spark_df.schema,
         )
 
         # Assert
