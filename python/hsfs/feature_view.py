@@ -2974,7 +2974,7 @@ class FeatureView:
             # fetch feature view
             fg = fs.get_feature_view(name="my_feature_view", version=1)
             # enable feature monitoring
-            my_config = fg._create_feature_monitoring(
+            my_config = fg.create_feature_monitoring(
                 name="my_monitoring_config",
                 feature_name="my_feature",
                 job_frequency="DAILY",
