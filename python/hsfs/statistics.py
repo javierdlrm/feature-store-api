@@ -120,11 +120,6 @@ class Statistics:
             if json_decamelized["count"] == 0:
                 print("[Statistics] from_response_json - returning None, count == 0")
                 return None
-            if json_decamelized["count"] == 1:
-                print(
-                    "[Statistics] from_response_json - returning a single stats obj (response list)"
-                )
-                return cls(**json_decamelized["items"][0])
             else:
                 print("[Statistics] from_response_json - return a list of stats objs")
                 return [cls(**config) for config in json_decamelized["items"]]
