@@ -14,6 +14,8 @@
 #   limitations under the License.
 #
 
+from typing import List
+
 from hsfs import client, statistics, feature_view
 from hsfs.core import job
 
@@ -30,7 +32,9 @@ class StatisticsApi:
         self._feature_store_id = feature_store_id
         self._entity_type = entity_type  # TODO: Support FV
 
-    def post(self, metadata_instance, stats, training_dataset_version):
+    def post(
+        self, metadata_instance, stats, training_dataset_version
+    ) -> statistics.Statistics:
         _client = client.get_instance()
         path_params = self.get_path(metadata_instance, training_dataset_version)
 
@@ -53,7 +57,7 @@ class StatisticsApi:
         for_transformation=None,
         transformed_with_version=None,
         training_dataset_version=None,
-    ):
+    ) -> statistics.Statistics:
         """Get single statistics of an entity.
 
         :param metadata_instance: metadata object of the instance to get statistics of
@@ -134,7 +138,7 @@ class StatisticsApi:
         for_transformation=None,
         transformed_with_version=None,
         training_dataset_version=None,
-    ):
+    ) -> List[statistics.Statistics]:
         """Get all statistics of an entity.
 
         :param metadata_instance: metadata object of the instance to get statistics of
@@ -202,7 +206,7 @@ class StatisticsApi:
             _client._send_request("GET", path_params, query_params, headers=headers)
         )
 
-    def compute(self, metadata_instance, training_dataset_version=None):
+    def compute(self, metadata_instance, training_dataset_version=None) -> job.Job:
         """Compute statistics for an entity.
 
         :param metadata_instance: metadata object of the instance to compute statistics for
@@ -216,7 +220,7 @@ class StatisticsApi:
         ]
         return job.Job.from_response_json(_client._send_request("POST", path_params))
 
-    def get_path(self, metadata_instance, training_dataset_version=None):
+    def get_path(self, metadata_instance, training_dataset_version=None) -> str:
         """Get statistics path.
 
         :param metadata_instance: metadata object of the instance to compute statistics for

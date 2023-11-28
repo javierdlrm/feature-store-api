@@ -51,6 +51,7 @@ from hsfs.core import (
     feature_group_api,
     dataset_api,
     job_api,
+    job,
     ingestion_job_conf,
     statistics_api,
     training_dataset_api,
@@ -343,7 +344,7 @@ class Engine:
                 + "environment with Spark Engine."
             )
 
-    def profile_by_spark(self, metadata_instance):
+    def profile_by_spark(self, metadata_instance) -> job.Job:
         stat_api = statistics_api.StatisticsApi(
             metadata_instance.feature_store_id, metadata_instance.ENTITY_TYPE
         )

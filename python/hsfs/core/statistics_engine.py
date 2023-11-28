@@ -37,7 +37,7 @@ class StatisticsEngine:
         feature_dataframe=None,
         feature_group_commit_id=None,
         feature_view_obj=None,
-    ) -> Union[statistics.Statistics, job.Job]:
+    ) -> Optional[Union[statistics.Statistics, job.Job]]:
         """Compute statistics for a dataframe and send the result json to Hopsworks.
         Args:
             metadata_instance: Union[FeatureGroup, TrainingDataset]. Metadata of the entity containing the data.
@@ -278,7 +278,7 @@ class StatisticsEngine:
         computation_time: Optional[float] = None,
         for_transformation: Optional[bool] = None,
         training_dataset_version: Optional[int] = None,
-    ) -> statistics.Statistics:
+    ) -> Optional[statistics.Statistics]:
         """Get statistics of an entity computed at a specific time.
            If the computation time is not provided, the most recently computed statistics will be retrieved.
 
@@ -316,7 +316,7 @@ class StatisticsEngine:
         feature_names: Optional[List[str]] = None,
         computation_time: Optional[float] = None,
         training_dataset_version: Optional[int] = None,
-    ):
+    ) -> Optional[List[statistics.Statistics]]:
         """Get all statistics of an entity computed before a specific time.
            If the computation time is not provided, all the statistics will be retrieved.
 
@@ -356,7 +356,7 @@ class StatisticsEngine:
         # feature view
         is_event_window: Optional[bool] = None,  # True if event times
         computation_time: Optional[float] = None,  # only for event windows
-    ) -> Union[statistics.Statistics, List[statistics.Statistics], None]:
+    ) -> Optional[statistics.Statistics]:
         """Get the statistics of an entity based on a commit time window.
         Args:
             metadata_instance: Union[FeatureGroup]: Metadata of the entity containing the data.
@@ -465,7 +465,9 @@ class StatisticsEngine:
             )
         return stats
 
-    def _parse_deequ_statistics(self, stats) -> List[FeatureDescriptiveStatistics]:
+    def _parse_deequ_statistics(
+        self, stats
+    ) -> Optional[List[FeatureDescriptiveStatistics]]:
         if stats is None:
             warnings.warn(
                 "There is no Deequ statistics to deserialize. A possible cause might be that Deequ did not succeed in the statistics computation.",

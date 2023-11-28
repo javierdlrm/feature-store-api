@@ -288,9 +288,7 @@ class FeatureMonitoringResultEngine:
     def run_and_save_statistics_comparison(
         self,
         fm_config: "fmc.FeatureMonitoringConfig",
-        detection_statistics: Union[
-            FeatureDescriptiveStatistics, List[FeatureDescriptiveStatistics]
-        ],
+        detection_statistics: List[FeatureDescriptiveStatistics],
         reference_statistics: Optional[FeatureDescriptiveStatistics] = None,
         specific_value: Optional[Union[int, float]] = None,
     ) -> List[FeatureMonitoringResult]:
@@ -298,7 +296,7 @@ class FeatureMonitoringResultEngine:
 
         Args:
             fm_config: FeatureMonitoringConfig. Feature monitoring configuration.
-            detection_statistics: Union[FeatureDescriptiveStatistics, List[FeatureDescriptiveStatistics]]. Computed statistics from detection data.
+            detection_statistics: List[FeatureDescriptiveStatistics]. Computed statistics from detection data.
             reference_statistics: Optional[Union[FeatureDescriptiveStatistics, List[FeatureDescriptiveStatistics], int, float]].
                 Computed statistics from reference data, or a specific value to use as reference.
 
@@ -306,23 +304,22 @@ class FeatureMonitoringResultEngine:
             Union[FeatureMonitoringResult, List[FeatureMonitoringResult]]. Feature monitoring result
         """
         if reference_statistics or specific_value:
-            assert isinstance(detection_statistics, FeatureDescriptiveStatistics), (
+            assert len(detection_statistics) == 1, (
                 "detection_statistics must a be a single FeatureDescriptiveStatistics object "
                 "if reference_statistics or specific_value is provided."
             )
-
             difference, shift_detected = self.compute_difference_and_shift(
                 fm_config=fm_config,
-                detection_statistics=detection_statistics,
+                detection_statistics=detection_statistics[0],
                 reference_statistics=reference_statistics,
                 specific_value=specific_value,
             )
         else:
             difference, shift_detected = None, False
 
-        if isinstance(detection_statistics, list):
-            results = [
-                self.build_feature_monitoring_result(
+        return [
+            self.save_feature_monitoring_result(
+                result=self.build_feature_monitoring_result(
                     config_id=fm_config.id,
                     feature_name=det_stats.feature_name,
                     raised_exception=False,
@@ -330,24 +327,8 @@ class FeatureMonitoringResultEngine:
                     difference=difference,
                     shift_detected=shift_detected,
                 )
-                for det_stats in detection_statistics
-            ]
-        else:
-            results = [
-                self.build_feature_monitoring_result(
-                    config_id=fm_config.id,
-                    feature_name=detection_statistics.feature_name,
-                    raised_exception=False,
-                    detection_statistics=detection_statistics,
-                    reference_statistics=reference_statistics,
-                    specific_value=specific_value,
-                    difference=difference,
-                    shift_detected=shift_detected,
-                )
-            ]
-
-        return [
-            self.save_feature_monitoring_result(result=result) for result in results
+            )
+            for det_stats in detection_statistics
         ]
 
     def compute_difference_and_shift(
