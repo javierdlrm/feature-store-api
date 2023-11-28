@@ -24,6 +24,13 @@ class RestAPIError(Exception):
         FEATURE_GROUP_COMMIT_NOT_FOUND = 270226
         STATISTICS_NOT_FOUND = 270227
 
+        def __eq__(self, other):
+            return (
+                self == other
+                if self.__class__ is other.__class__
+                else self.value == int(other)
+            )
+
     def __init__(self, url, response):
         try:
             error_object = response.json()
