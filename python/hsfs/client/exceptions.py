@@ -14,9 +14,15 @@
 #   limitations under the License.
 #
 
+from enum import Enum
+
 
 class RestAPIError(Exception):
     """REST Exception encapsulating the response object and url."""
+
+    class FeatureStoreErrorCode(Enum):
+        FEATURE_GROUP_COMMIT_NOT_FOUND = 270226
+        STATISTICS_NOT_FOUND = 270227
 
     def __init__(self, url, response):
         try:
