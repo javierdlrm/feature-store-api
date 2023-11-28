@@ -808,7 +808,7 @@ class Engine:
         pass
 
     def create_empty_df(self, schema):
-        return pd.DataFrame(columns=[schema])
+        return pd.DataFrame(columns=schema)
 
     def get_job_url(self, href: str):
         """Use the endpoint returned by the API to construct the UI url for jobs
