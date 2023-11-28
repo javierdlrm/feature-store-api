@@ -304,6 +304,8 @@ class MonitoringWindowConfigEngine:
                 if is_event_window
                 else None,  # TODO: for event window, get the latest statistics computed?
             )
+            if isinstance(registered_stats, list):
+                registered_stats = registered_stats[0]
 
         if registered_stats is None:  # if statistics don't exist
             # Fetch the actual data for which to compute statistics based on row_percentage and time window
