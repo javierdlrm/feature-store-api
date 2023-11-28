@@ -247,7 +247,7 @@ class MonitoringWindowConfigEngine:
         monitoring_window_config: "mwc.MonitoringWindowConfig",
         feature_name: Optional[str] = None,
         is_event_window: bool = False,
-    ) -> Union[FeatureDescriptiveStatistics, List[FeatureDescriptiveStatistics]]:
+    ) -> List[FeatureDescriptiveStatistics]:
         """Fetch the entity data based on monitoring window configuration and compute statistics.
 
         Args:
@@ -261,6 +261,10 @@ class MonitoringWindowConfigEngine:
             [FeatureDescriptiveStatistics, List[FeatureDescriptiveStatitics]]: List of Descriptive statistics.
         """
         self._init_statistics_engine(entity._feature_store_id, entity.ENTITY_TYPE)
+        (start_time, end_time,) = self.get_window_start_end_times(
+            monitoring_window_config=monitoring_window_config,
+            is_event_window=is_event_window,
+        )
         if (
             monitoring_window_config.window_config_type
             == mwc.WindowConfigType.TRAINING_DATASET
@@ -271,11 +275,6 @@ class MonitoringWindowConfigEngine:
                 training_dataset_version=monitoring_window_config.training_dataset_version,
             ).statistics
         else:
-            # Check if statistics already exists
-            (start_time, end_time,) = self.get_window_start_end_times(
-                monitoring_window_config=monitoring_window_config,
-                is_event_window=is_event_window,
-            )
             print(
                 "[monitoring_window_config_engine] run_single_window_monitoring: start - "
                 + (str(start_time) if start_time is not None else "None")
@@ -292,7 +291,7 @@ class MonitoringWindowConfigEngine:
                 + " , feature_name: "
                 + (str(feature_name) if feature_name is not None else "None")
             )
-
+            # Check if statistics already exists
             registered_stats = self._statistics_engine.get_by_time_window(
                 metadata_instance=entity,
                 start_time=start_time,
@@ -304,8 +303,6 @@ class MonitoringWindowConfigEngine:
                 if is_event_window
                 else None,  # TODO: for event window, get the latest statistics computed?
             )
-            if isinstance(registered_stats, list):
-                registered_stats = registered_stats[0]
 
         if registered_stats is None:  # if statistics don't exist
             # Fetch the actual data for which to compute statistics based on row_percentage and time window
@@ -335,11 +332,10 @@ class MonitoringWindowConfigEngine:
                 "[monitoring_window_config_engine] run_single_window_monitoring - Statistics already EXIST"
             )
 
-        return (
-            registered_stats.feature_descriptive_statistics[0]
-            if feature_name is not None
-            else registered_stats.feature_descriptive_statistics
-        )
+        assert (
+            registered_stats.feature_descriptive_statistics is not None
+        ), "statistics should contain the feature descriptive statistics"
+        return registered_stats.feature_descriptive_statistics
 
     def fetch_entity_data_in_monitoring_window(
         self,
