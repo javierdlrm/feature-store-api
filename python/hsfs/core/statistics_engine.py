@@ -20,7 +20,7 @@ import warnings
 from typing import List, Union, Optional
 
 from hsfs import engine, statistics, util, split_statistics
-from hsfs.client import exceptions
+from hsfs.client.exceptions import RestAPIError, FeatureStoreException
 from hsfs.core import statistics_api, job
 from hsfs.core.feature_descriptive_statistics import FeatureDescriptiveStatistics
 
@@ -142,7 +142,7 @@ class StatisticsEngine:
             # only through run_feature_monitoring(), which is the entrypoint of the feature monitoring job.
             # Pending work for next sprint is to compute statistics on the Python client as well, as part of
             # the deequ replacement work.
-            raise exceptions.FeatureStoreException(
+            raise FeatureStoreException(
                 "Descriptive statistics for feature monitoring cannot be computed from the Python engine."
             )
 
@@ -300,10 +300,11 @@ class StatisticsEngine:
                 for_transformation=for_transformation,
                 training_dataset_version=training_dataset_version,
             )
-        except exceptions.RestAPIError as e:
+        except RestAPIError as e:
             if (
                 # statistics not found
-                e.response.json().get("errorCode", "") == 270226
+                e.response.json().get("errorCode", "")
+                == RestAPIError.FeatureStoreErrorCode.STATISTICS_NOT_FOUND
                 and e.response.status_code == 404
             ):
                 return None
@@ -334,10 +335,11 @@ class StatisticsEngine:
                 computation_time=computation_time,
                 training_dataset_version=training_dataset_version,
             )
-        except exceptions.RestAPIError as e:
+        except RestAPIError as e:
             if (
                 # statistics not found
-                e.response.json().get("errorCode", "") == 270226
+                e.response.json().get("errorCode", "")
+                == RestAPIError.FeatureStoreErrorCode.STATISTICS_NOT_FOUND
                 and e.response.status_code == 404
             ):
                 return None
@@ -381,14 +383,16 @@ class StatisticsEngine:
                 is_event_window=is_event_window,
                 computation_time=computation_time,
             )
-        except exceptions.RestAPIError as e:
+        except RestAPIError as e:
             if (
                 # statistics not found
-                e.response.json().get("errorCode", "") == 270226
+                e.response.json().get("errorCode", "")
+                == RestAPIError.FeatureStoreErrorCode.STATISTICS_NOT_FOUND
                 and e.response.status_code == 404
             ) or (
                 # commits not found
-                e.response.json().get("errorCode", "") == 270225
+                e.response.json().get("errorCode", "")
+                == RestAPIError.FeatureStoreErrorCode.FEATURE_GROUP_COMMIT_NOT_FOUND
                 and e.response.status_code == 400
             ):
                 return None
@@ -404,7 +408,7 @@ class StatisticsEngine:
             (engine.get_type() == "hive" or engine.get_type() == "python")
             and len(feature_dataframe.head()) == 0
         ):
-            raise exceptions.FeatureStoreException(
+            raise FeatureStoreException(
                 "There is no data in the entity that you are trying to compute "
                 "statistics for. A possible cause might be that you inserted only data "
                 "to the online storage of a feature group."

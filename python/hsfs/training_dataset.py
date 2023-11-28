@@ -391,7 +391,8 @@ class TrainingDataset:
                 registered_stats = self._statistics_engine.get(self)
             except RestAPIError as e:
                 if (
-                    e.response.json().get("errorCode", "") == 270226
+                    e.response.json().get("errorCode", "")
+                    == RestAPIError.FeatureStoreErrorCode.STATISTICS_NOT_FOUND
                     and e.response.status_code == 404
                 ):
                     registered_stats = None
