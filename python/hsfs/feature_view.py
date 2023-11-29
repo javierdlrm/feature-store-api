@@ -2730,7 +2730,7 @@ class FeatureView:
         """
         self._feature_view_engine.delete_training_data(self)
 
-    def _get_feature_monitoring_configs(
+    def get_feature_monitoring_configs(
         self,
         name: Optional[str] = None,
         feature_name: Optional[str] = None,
@@ -2786,7 +2786,7 @@ class FeatureView:
             config_id=config_id,
         )
 
-    def _get_feature_monitoring_history(
+    def get_feature_monitoring_history(
         self,
         config_name: Optional[str] = None,
         config_id: Optional[int] = None,
@@ -2847,7 +2847,7 @@ class FeatureView:
             with_statistics=with_statistics,
         )
 
-    def _create_statistics_monitoring(
+    def create_statistics_monitoring(
         self,
         name: str,
         job_frequency: str = "DAILY",
@@ -2923,7 +2923,7 @@ class FeatureView:
             end_date_time=end_date_time,
         )
 
-    def _create_feature_monitoring(
+    def create_feature_monitoring(
         self,
         name: str,
         feature_name: str,
