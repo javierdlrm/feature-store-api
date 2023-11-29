@@ -332,6 +332,10 @@ class MonitoringWindowConfigEngine:
                 "[monitoring_window_config_engine] run_single_window_monitoring - Statistics already EXIST"
             )
 
+        # TODO: Fix
+        if isinstance(registered_stats, list):
+            registered_stats = registered_stats[0]
+
         assert (
             registered_stats.feature_descriptive_statistics is not None
         ), "statistics should contain the feature descriptive statistics"
