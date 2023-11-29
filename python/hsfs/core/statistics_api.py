@@ -122,9 +122,12 @@ class StatisticsApi:
         )
 
         # response is either a single item or not found exception
-        return statistics.Statistics.from_response_json(
+        stats = statistics.Statistics.from_response_json(
             _client._send_request("GET", path_params, query_params, headers=headers)
         )
+        if isinstance(stats, list):
+            stats = stats[0]
+        return stats
 
     def get_all(
         self,
