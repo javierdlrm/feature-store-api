@@ -1253,7 +1253,7 @@ class FeatureGroupBase:
         self,
         commit_time: Optional[Union[str, int, datetime, date]] = None,
         feature_names: Optional[List[str]] = None,
-    ) -> Statistics:
+    ) -> Optional[Statistics]:
         """Returns the statistics computed at a specific time for the current feature group.
 
         If `commit_time` is `None`, the most recent statistics are returned.
@@ -1291,7 +1291,7 @@ class FeatureGroupBase:
         self,
         commit_time: Optional[Union[str, int, datetime, date]] = None,
         feature_names: Optional[List[str]] = None,
-    ) -> Statistics:
+    ) -> Optional[List[Statistics]]:
         """Returns all the statistics metadata computed before a specific time for the current feature group.
 
         If `commit_time` is `None`, all the statistics metadata are returned.
@@ -1524,9 +1524,9 @@ class FeatureGroupBase:
         return self._features
 
     def _are_statistics_missing(self, statistics: Statistics):
-        if self.statistics_config.enabled is False:
+        if not self.statistics_config.enabled:
             return False
-        if statistics is None:
+        elif statistics is None:
             return True
         if (
             self.statistics_config.histograms
@@ -1556,7 +1556,7 @@ class FeatureGroupBase:
 
     def _are_statistics_supported(self):
         """Whether statistics are supported or not for the current Feature Group type"""
-        return not isinstance(self, SpineGroup) and not hasattr(self, "SPINE_GROUP")
+        return not isinstance(self, SpineGroup)
 
     def _check_statistics_support(self):
         """Check for statistics support on the current Feature Group type"""

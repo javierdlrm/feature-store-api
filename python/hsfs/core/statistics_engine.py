@@ -220,7 +220,7 @@ class StatisticsEngine:
         computation_time: Optional[float] = None,
         for_transformation: Optional[bool] = None,
         training_dataset_version: Optional[int] = None,
-    ) -> statistics.Statistics:
+    ) -> Optional[statistics.Statistics]:
         """Get statistics of an entity computed at a specific time.
            If the computation time is not provided, the most recently computed statistics will be retrieved.
 
@@ -257,7 +257,7 @@ class StatisticsEngine:
         feature_names: Optional[List[str]] = None,
         computation_time: Optional[float] = None,
         training_dataset_version: Optional[int] = None,
-    ):
+    ) -> Optional[List[statistics.Statistics]]:
         """Get all statistics of an entity computed before a specific time.
            If the computation time is not provided, all the statistics will be retrieved.
 
@@ -311,6 +311,9 @@ class StatisticsEngine:
                 feature_names=feature_names,
             )
         except exceptions.RestAPIError as e:
+            print("~~~~~~ CATCH exception ~~~~~~~~~")
+            print(e.response.json())
+            print(e.response.status_code)
             if (
                 # statistics not found
                 e.response.json().get("errorCode", "") == 270226
@@ -320,6 +323,7 @@ class StatisticsEngine:
                 e.response.json().get("errorCode", "") == 270225
                 and e.response.status_code == 400
             ):
+                print("~~~~~~ RETURN NONE ~~~~~~~~~")
                 return None
             raise e
 

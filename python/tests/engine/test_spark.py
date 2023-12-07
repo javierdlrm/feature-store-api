@@ -3430,6 +3430,41 @@ class TestSpark:
         )
 
         # Assert
+        print("@@ result.to_json_dict()")
+        print(result.to_json_dict())
+
+        print("@@ dict: ")
+        print(
+            {
+                "evaluation_parameters": {},
+                "meta": {
+                    "active_batch_definition": {
+                        "batch_identifiers": {"batch_id": "default_identifier"},
+                        "data_asset_name": "<YOUR_MEANGINGFUL_NAME>",
+                        "data_connector_name": "default_runtime_data_connector_name",
+                        "datasource_name": "my_spark_dataframe",
+                    },
+                    "batch_markers": {"ge_load_time": mocker.ANY},
+                    "batch_spec": {
+                        "batch_data": "SparkDataFrame",
+                        "data_asset_name": "<YOUR_MEANGINGFUL_NAME>",
+                    },
+                    "expectation_suite_name": "es_name",
+                    "great_expectations_version": "0.15.12",
+                    "run_id": {"run_name": "test_run_id", "run_time": mocker.ANY},
+                    "validation_time": mocker.ANY,
+                },
+                "results": [],
+                "statistics": {
+                    "evaluated_expectations": 0,
+                    "success_percent": None,
+                    "successful_expectations": 0,
+                    "unsuccessful_expectations": 0,
+                },
+                "success": True,
+            }
+        )
+
         assert result.to_json_dict() == {
             "evaluation_parameters": {},
             "meta": {
