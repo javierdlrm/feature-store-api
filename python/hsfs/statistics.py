@@ -113,18 +113,16 @@ class Statistics:
         ]
 
     @classmethod
-    def from_response_json(cls, json_dict):
-        json_decamelized = humps.decamelize(json_dict)
-        # Currently getting multiple commits at the same time is not allowed
+    def from_response_json(
+        cls, json_dict
+    ) -> Optional[Union["Statistics", List["Statistics"]]]:
+        json_decamelized: dict = humps.decamelize(json_dict)
+        # for consistency, if the json dict contains "count" and "items", we return a list
+        # even when there is a single statistics in the list
         if "count" in json_decamelized:
-            if json_decamelized["count"] == 0:
+            if json_decamelized["count"] == 0 or len(json_decamelized["items"]) == 0:
                 print("[Statistics] from_response_json - returning None, count == 0")
                 return None
-            if json_decamelized["count"] == 1:
-                print(
-                    "[Statistics] from_response_json - returning a single stats obj (response list)"
-                )
-                return cls(**json_decamelized["items"][0])
             else:
                 print("[Statistics] from_response_json - return a list of stats objs")
                 return [cls(**config) for config in json_decamelized["items"]]
