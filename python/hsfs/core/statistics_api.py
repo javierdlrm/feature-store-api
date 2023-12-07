@@ -14,6 +14,8 @@
 #   limitations under the License.
 #
 
+from typing import Optional, List, Union
+
 from hsfs import client, statistics, feature_view
 from hsfs.core import job
 
@@ -30,16 +32,19 @@ class StatisticsApi:
         self._feature_store_id = feature_store_id
         self._entity_type = entity_type  # TODO: Support FV
 
-    def post(self, metadata_instance, stats, training_dataset_version):
+    def post(
+        self, metadata_instance, stats, training_dataset_version
+    ) -> Optional[statistics.Statistics]:
         _client = client.get_instance()
         path_params = self.get_path(metadata_instance, training_dataset_version)
 
         headers = {"content-type": "application/json"}
-        return statistics.Statistics.from_response_json(
+        stats = statistics.Statistics.from_response_json(
             _client._send_request(
                 "POST", path_params, headers=headers, data=stats.json()
             )
         )
+        return self._extract_single_stats(stats)
 
     def get(
         self,
@@ -53,7 +58,7 @@ class StatisticsApi:
         for_transformation=None,
         transformed_with_version=None,
         training_dataset_version=None,
-    ):
+    ) -> Optional[statistics.Statistics]:
         """Get single statistics of an entity.
 
         :param metadata_instance: metadata object of the instance to get statistics of
@@ -81,6 +86,9 @@ class StatisticsApi:
         _client = client.get_instance()
         path_params = self.get_path(metadata_instance, training_dataset_version)
 
+        # single statistics
+        offset, limit = 0, 1
+
         headers = {"content-type": "application/json"}
         query_params = self._build_get_query_params(
             computation_time=computation_time,
@@ -94,8 +102,8 @@ class StatisticsApi:
             transformed_with_version=transformed_with_version,
             training_dataset_version=training_dataset_version,
             # retrieve only one entity statistics, including the feature descriptive statistics
-            offset=0,
-            limit=1,
+            offset=offset,
+            limit=limit,
             with_content=True,
         )
 
@@ -118,9 +126,10 @@ class StatisticsApi:
         )
 
         # response is either a single item or not found exception
-        return statistics.Statistics.from_response_json(
+        stats = statistics.Statistics.from_response_json(
             _client._send_request("GET", path_params, query_params, headers=headers)
         )
+        return self._extract_single_stats(stats)
 
     def get_all(
         self,
@@ -134,7 +143,7 @@ class StatisticsApi:
         for_transformation=None,
         transformed_with_version=None,
         training_dataset_version=None,
-    ):
+    ) -> Optional[List[statistics.Statistics]]:
         """Get all statistics of an entity.
 
         :param metadata_instance: metadata object of the instance to get statistics of
@@ -162,6 +171,9 @@ class StatisticsApi:
         _client = client.get_instance()
         path_params = self.get_path(metadata_instance, training_dataset_version)
 
+        # multiple statistics
+        offset, limit = 0, None
+
         headers = {"content-type": "application/json"}
         query_params = self._build_get_query_params(
             computation_time=computation_time,
@@ -175,8 +187,8 @@ class StatisticsApi:
             transformed_with_version=transformed_with_version,
             training_dataset_version=training_dataset_version,
             # retrieve all entity statistics, excluding feature descriptive statistics
-            offset=None,
-            limit=None,
+            offset=offset,
+            limit=limit,
             with_content=False,
         )
 
@@ -202,7 +214,7 @@ class StatisticsApi:
             _client._send_request("GET", path_params, query_params, headers=headers)
         )
 
-    def compute(self, metadata_instance, training_dataset_version=None):
+    def compute(self, metadata_instance, training_dataset_version=None) -> job.Job:
         """Compute statistics for an entity.
 
         :param metadata_instance: metadata object of the instance to compute statistics for
@@ -216,7 +228,7 @@ class StatisticsApi:
         ]
         return job.Job.from_response_json(_client._send_request("POST", path_params))
 
-    def get_path(self, metadata_instance, training_dataset_version=None):
+    def get_path(self, metadata_instance, training_dataset_version=None) -> list:
         """Get statistics path.
 
         :param metadata_instance: metadata object of the instance to compute statistics for
@@ -254,6 +266,9 @@ class StatisticsApi:
                 "statistics",
             ]
 
+    def _extract_single_stats(self, stats) -> Optional[statistics.Statistics]:
+        return stats[0] if isinstance(stats, list) else stats
+
     def _build_get_query_params(
         self,
         computation_time=None,
@@ -269,7 +284,7 @@ class StatisticsApi:
         offset=0,
         limit=None,
         with_content=False,
-    ):
+    ) -> dict:
         """Build query parameters for statistics requests.
 
         :param computation_time: Time at which statistics where computed
@@ -297,14 +312,14 @@ class StatisticsApi:
         :param with_content: Whether include feature descriptive statistics in the response or not
         :type with_content: bool
         """
-        query_params = {"offset": offset}
+        query_params: dict[str, Union[int, str, List[str]]] = {"offset": offset}
         if limit is not None:
             query_params["limit"] = limit
         if with_content:
             query_params["fields"] = "content"
 
-        sorts = []
-        filters = []
+        sorts: List[str] = []
+        filters: List[str] = []
 
         # filters and sorts
 

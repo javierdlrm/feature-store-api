@@ -379,98 +379,6 @@ class TestStatisticsEngine:
         assert mock_statistics_engine_save_statistics.call_count == 0
         assert mock_engine_get_instance.return_value.profile_by_spark.call_count == 0
 
-    def test_compute_monitoring_feature_statistics(self, mocker):
-        # Arrange
-        feature_store_id = 99
-
-        mocker.patch("hsfs.engine.get_type", return_value="python")
-        mock_statistics_engine_profile_statistics = mocker.patch(
-            "hsfs.core.statistics_engine.StatisticsEngine.profile_statistics",
-            return_value=None,
-        )
-        mock_statistics_engine_save_statistics = mocker.patch(
-            "hsfs.core.statistics_engine.StatisticsEngine._save_statistics"
-        )
-        mock_engine_get_instance = mocker.patch("hsfs.engine.get_instance")
-
-        s_engine = statistics_engine.StatisticsEngine(feature_store_id, "featuregroup")
-
-        fg = feature_group.FeatureGroup(
-            name="test",
-            version=1,
-            featurestore_id=feature_store_id,
-            primary_key=[],
-            partition_key=[],
-            id=10,
-        )
-        feature_dataframe = mocker.Mock()
-        feature_dataframe.head.return_value = []
-
-        # Act
-        with pytest.raises(exceptions.FeatureStoreException) as e_info:
-            s_engine.compute_and_save_monitoring_statistics(
-                metadata_instance=fg,
-                feature_dataframe=feature_dataframe,
-                start_time=None,
-                end_time=None,
-                row_percentage=None,
-            )
-
-        # Assert
-        assert mock_statistics_engine_profile_statistics.call_count == 0
-        assert mock_statistics_engine_save_statistics.call_count == 0
-        assert mock_engine_get_instance.return_value.profile_by_spark.call_count == 0
-        assert (
-            str(e_info.value)
-            == "Descriptive statistics for feature monitoring cannot be computed from the Python engine."
-        )
-
-    def test_compute_and_save_monitoring_statistics_get_type_spark(self, mocker):
-        # Arrange
-        feature_store_id = 99
-
-        mocker.patch("hsfs.engine.get_type", return_value="spark")
-        mock_statistics_engine_profile_statistics = mocker.patch(
-            "hsfs.core.statistics_engine.StatisticsEngine.profile_statistics",
-            return_value="",
-        )
-        mock_statistics_engine_save_statistics = mocker.patch(
-            "hsfs.core.statistics_engine.StatisticsEngine._save_statistics"
-        )
-        mock_engine_get_instance = mocker.patch("hsfs.engine.get_instance")
-
-        mocker.patch("json.loads", return_value={"columns": {}})
-        mocker.patch(
-            "hsfs.core.feature_descriptive_statistics.FeatureDescriptiveStatistics.from_deequ_json"
-        )
-
-        s_engine = statistics_engine.StatisticsEngine(feature_store_id, "featuregroup")
-
-        fg = feature_group.FeatureGroup(
-            name="test",
-            version=1,
-            featurestore_id=feature_store_id,
-            primary_key=[],
-            partition_key=[],
-            id=10,
-        )
-        feature_dataframe = mocker.Mock()
-        feature_dataframe.head.return_value = []
-
-        # Act
-        s_engine.compute_and_save_monitoring_statistics(
-            metadata_instance=fg,
-            feature_dataframe=feature_dataframe,
-            start_time=None,
-            end_time=None,
-            row_percentage=None,
-        )
-
-        # Assert
-        assert mock_statistics_engine_profile_statistics.call_count == 1
-        assert mock_statistics_engine_save_statistics.call_count == 1
-        assert mock_engine_get_instance.return_value.profile_by_spark.call_count == 0
-
     def test_profile_statistics_with_config(self, mocker):
         # Arrange
         feature_store_id = 99
@@ -781,51 +689,51 @@ class TestStatisticsEngine:
         # Assert
         assert mock_statistics_engine_save_statistics.call_count == 1
 
-    def test_get_last_computed(self, mocker):
+    def test_get(self, mocker):
         # Arrange
         feature_store_id = 99
 
-        mock_statistics_api_get_last = mocker.patch(
-            "hsfs.core.statistics_api.StatisticsApi.get_last_computed"
-        )
-
-        s_engine = statistics_engine.StatisticsEngine(feature_store_id, "featuregroup")
-
-        # Act
-        s_engine.get_last_computed(
-            metadata_instance=None,
-            for_transformation=None,
-            training_dataset_version=None,
-        )
-
-        # Assert
-        assert mock_statistics_api_get_last.call_count == 1
-
-    def test_get_computed_at(self, mocker):
-        # Arrange
-        feature_store_id = 99
-
-        # mocker.patch("hsfs.util.get_timestamp_from_date_string")
         mock_statistics_api = mocker.patch("hsfs.core.statistics_api.StatisticsApi")
 
         s_engine = statistics_engine.StatisticsEngine(feature_store_id, "featuregroup")
 
         # Act
-        s_engine.get_computed_at(
+        s_engine.get(
             metadata_instance=None,
-            computed_at=None,
+            feature_names=None,
+            computation_time=None,
             for_transformation=None,
             training_dataset_version=None,
         )
 
         # Assert
-        assert mock_statistics_api.return_value.get_computed_at.call_count == 1
+        assert mock_statistics_api.return_value.get.call_count == 1
+        assert mock_statistics_api.return_value.get_all.call_count == 0
+
+    def test_get_all(self, mocker):
+        # Arrange
+        feature_store_id = 99
+
+        mock_statistics_api = mocker.patch("hsfs.core.statistics_api.StatisticsApi")
+
+        s_engine = statistics_engine.StatisticsEngine(feature_store_id, "featuregroup")
+
+        # Act
+        s_engine.get_all(
+            metadata_instance=None,
+            feature_names=None,
+            computation_time=None,
+            training_dataset_version=None,
+        )
+
+        # Assert
+        assert mock_statistics_api.return_value.get_all.call_count == 1
+        assert mock_statistics_api.return_value.get.call_count == 0
 
     def test_get_by_time_window(self, mocker):
         # Arrange
         feature_store_id = 99
 
-        # mocker.patch("hsfs.util.get_timestamp_from_date_string")
         mock_statistics_api = mocker.patch("hsfs.core.statistics_api.StatisticsApi")
 
         s_engine = statistics_engine.StatisticsEngine(feature_store_id, "featuregroup")
@@ -835,14 +743,64 @@ class TestStatisticsEngine:
             metadata_instance=None,
             start_time=None,
             end_time=None,
-            is_event_time=None,
-            feature_name=None,
-            row_percentage=None,
-            computed_at=None,
+            feature_names=None,
         )
 
         # Assert
-        assert mock_statistics_api.return_value.get_by_time_window.call_count == 1
+        assert mock_statistics_api.return_value.get.call_count == 1
+        assert mock_statistics_api.return_value.get_all.call_count == 0
+
+    def test_get_by_time_window_stats_not_found(self, mocker):
+        # Arrange
+        feature_store_id = 99
+
+        not_found_response = mocker.Mock()
+        not_found_response.json.return_value = {"errorCode": 270226}
+        not_found_response.status_code = 404
+
+        mocker.patch(
+            "hsfs.core.statistics_api.StatisticsApi.get",
+            side_effect=exceptions.RestAPIError("url", not_found_response),
+        )
+
+        s_engine = statistics_engine.StatisticsEngine(feature_store_id, "featuregroup")
+
+        # Act
+        s = s_engine.get_by_time_window(
+            metadata_instance=None,
+            start_time=None,
+            end_time=None,
+            feature_names=None,
+        )
+
+        # Assert
+        assert s is None
+
+    def test_get_by_time_window_commit_not_found(self, mocker):
+        # Arrange
+        feature_store_id = 99
+
+        bad_request_response = mocker.Mock()
+        bad_request_response.json.return_value = {"errorCode": 270225}
+        bad_request_response.status_code = 400
+
+        mocker.patch(
+            "hsfs.core.statistics_api.StatisticsApi.get",
+            side_effect=exceptions.RestAPIError("url", bad_request_response),
+        )
+
+        s_engine = statistics_engine.StatisticsEngine(feature_store_id, "featuregroup")
+
+        # Act
+        s = s_engine.get_by_time_window(
+            metadata_instance=None,
+            start_time=None,
+            end_time=None,
+            feature_names=None,
+        )
+
+        # Assert
+        assert s is None
 
     def test_save_statistics(self, mocker):
         # Arrange
