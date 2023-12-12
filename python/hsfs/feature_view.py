@@ -40,6 +40,7 @@ from hsfs.core import (
 )
 from hsfs.transformation_function import TransformationFunction
 from hsfs.statistics_config import StatisticsConfig
+from hsfs.statistics import Statistics
 from hsfs.core.feature_view_api import FeatureViewApi
 from hsfs.training_dataset_split import TrainingDatasetSplit
 from hsfs.serving_key import ServingKey
@@ -2492,6 +2493,32 @@ class FeatureView:
             training_helper_columns=training_helper_columns,
         )
         return df
+
+    @usage.method_logger
+    def get_training_dataset_statistics(self, training_dataset_version) -> Statistics:
+        """
+        Get statistics of a training dataset.
+
+        !!! example
+            ```python
+            # get feature store instance
+            fs = ...
+
+            # get feature view instance
+            feature_view = fs.get_feature_view(...)
+
+            # get training dataset statistics
+            statistics = feature_view.get_training_dataset_statistics(training_dataset_version=1)
+            ```
+
+        # Arguments
+            training_dataset_version: training dataset version
+        # Returns
+            `Statistics`
+        """
+        return self._statistics_engine.get(
+            self, training_dataset_version=training_dataset_version
+        )
 
     @usage.method_logger
     def add_training_dataset_tag(self, training_dataset_version: int, name: str, value):
