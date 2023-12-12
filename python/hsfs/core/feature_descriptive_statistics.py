@@ -16,7 +16,7 @@
 
 import json
 import humps
-from typing import Optional, Mapping
+from typing import Optional, Union, Mapping
 from hsfs.util import FeatureStoreEncoder
 
 
@@ -60,7 +60,7 @@ class FeatureDescriptiveStatistics:
         entropy: Optional[float] = None,
         uniqueness: Optional[float] = None,
         exact_num_distinct_values: Optional[int] = None,
-        extended_statistics: Optional[str] = None,
+        extended_statistics: Optional[Union[dict, str]] = None,
         id: Optional[int] = None,
     ):
         self._id = id
