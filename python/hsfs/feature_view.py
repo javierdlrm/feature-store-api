@@ -2592,7 +2592,9 @@ class FeatureView:
         return df
 
     @usage.method_logger
-    def get_training_dataset_statistics(self, training_dataset_version) -> Statistics:
+    def get_training_dataset_statistics(
+        self, training_dataset_version, for_transformation=False
+    ) -> Statistics:
         """
         Get statistics of a training dataset.
 
@@ -2614,7 +2616,9 @@ class FeatureView:
             `Statistics`
         """
         return self._statistics_engine.get(
-            self, training_dataset_version=training_dataset_version
+            self,
+            training_dataset_version=training_dataset_version,
+            for_transformation=for_transformation,
         )
 
     @usage.method_logger
