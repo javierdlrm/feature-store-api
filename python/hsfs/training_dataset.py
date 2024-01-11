@@ -840,10 +840,18 @@ class TrainingDataset(TrainingDatasetBase):
     @classmethod
     def from_response_json(cls, json_dict):
         json_decamelized = humps.decamelize(json_dict)
-        for td in json_decamelized:
-            _ = td.pop("type")
-            cls._rewrite_location(td)
-        return [cls(**td) for td in json_decamelized]
+        if "count" in json_decamelized:
+            if json_decamelized["count"] == 0:
+                return []
+            tds = []
+            for td in json_decamelized["items"]:
+                td.pop("type")
+                td.pop("href")
+                cls._rewrite_location(td)
+                tds.append(cls(**td))
+            return tds
+        else:  # single response
+            return cls.from_response_json_single(json_dict)
 
     @classmethod
     def from_response_json_single(cls, json_dict):
