@@ -12,7 +12,6 @@ class Predict(object):
 
         mr = project.get_model_registry()
         ms = project.get_model_serving()
-        deployment = ms.get_deployment("rankingdeployment")
 
         # todo we should use decision_engine_api here, but it needs backend first
         import yaml
@@ -21,6 +20,8 @@ class Predict(object):
         with open(downloaded_file_path, "r") as f:
             config = yaml.safe_load(f)
         prefix = 'de_' + config['name'] + '_'
+
+        deployment = ms.get_deployment((prefix + "ranking_deployment").replace("_", "").lower())
 
         try:
             model_path = os.path.join(os.environ.get("ARTIFACT_FILES_PATH", ""), "ranking_model.pkl")

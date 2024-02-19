@@ -42,7 +42,7 @@ context_features = config['observations']['features']
 num_items = config['observations']['num_last_visited_items']
 
 try:
-    training_fv = fs.get_feature_view(name="training")
+    training_fv = fs.get_feature_view(name=prefix + "training")
 except Exception as e:
     logging.info("Couldn't retrieve training FV. Creating observations FG, training FV and training dataset.")
     logging.error(e)
@@ -78,11 +78,11 @@ except Exception as e:
     observations_fg = setup_observations_fg(fs)
 
     # workaround for self-join:
-    original_fg = fs.get_feature_group('items')
+    original_fg = fs.get_feature_group(prefix + 'items')
     original_df = original_fg.read()
     items_fgs = [original_fg]
     for i in range(num_items):
-        copy_fg = fs.create_feature_group(f'items__copy_{i}',
+        copy_fg = fs.create_feature_group(prefix + f'items__copy_{i}',
                                           description='COPY Catalog for the Decision Engine project',
                                           primary_key=config['catalog']['primary_key'],
                                           online_enabled=True,
@@ -158,5 +158,5 @@ df_deser = df_read.selectExpr("CAST(value AS STRING)") \
                 *[f"CAST(item_{i}_id as long)" for i in range(num_items)],
                 *[f"CAST({feat_name} as string)" for feat_name in context_features])
 
-observations_fg = fs.get_feature_group("observations")
+observations_fg = fs.get_feature_group(prefix + "observations")
 fg_stream_query = observations_fg.insert_stream(df_deser)

@@ -17,9 +17,10 @@ class Transformer(object):
         downloaded_file_path = dataset_api.download("Resources/test_config.yml")
         with open(downloaded_file_path, "r") as f:
             self.config = yaml.safe_load(f)
+        self.prefix = 'de_' + self.config['name'] + '_'
 
         self.fs = project.get_feature_store()
-        self.catalog_fv = self.fs.get_feature_view(self.config['catalog']['feature_group_name'], 1)
+        self.catalog_fv = self.fs.get_feature_view(self.prefix + self.config['catalog']['feature_group_name'], 1)
         self.catalog_fv.init_serving()
 
         # create opensearch client
@@ -39,7 +40,7 @@ class Transformer(object):
         hits = []
         for val in last_items_feat_vectors:
             try:
-                embed = val['_source']['my_vector1']  # derive items embeddings from the index
+                embed = val['_source'][self.prefix + "vector"]  # derive items embeddings from the index
             except Exception as e:
                 print(f"Error while retrieving vector {val['_id']}: {e}")
                 continue
@@ -84,7 +85,7 @@ class Transformer(object):
             "size": k,
             "query": {
                 "knn": {
-                    "my_vector1": {
+                    self.prefix + "vector": {
                         "vector": query_emb,
                         "k": k
                     }

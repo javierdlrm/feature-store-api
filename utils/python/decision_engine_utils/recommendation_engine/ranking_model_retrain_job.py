@@ -132,7 +132,7 @@ logging.info(f"New model version is {ranking_model.version}")
 
 # Updating deployment
 ms = project.get_model_serving()
-deployment = ms.get_deployment(prefix + "ranking_deployment")
+deployment = ms.get_deployment((prefix + "ranking_deployment").replace("_", ""))
 deployment.model_version = ranking_model.version
 deployment.artifact_version = "CREATE"
 deployment.script_file = os.path.join("/Projects", project.name, "Resources", 'ranking_model_predictor.py').replace('\\', '/')  # hardcode filename due to the bug
