@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import sys
 import hopsworks
@@ -9,6 +10,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import collect_set, col, expr
 import tensorflow as tf
 import tensorflow_addons as tfa
+
+from opensearchpy import OpenSearch
 
 from hsml.client.exceptions import ModelServingException
 
@@ -26,6 +29,7 @@ def login_to_project(args):
     fs = project.get_feature_store()
     mr = project.get_model_registry()
     ms = project.get_model_serving()
+    opensearch_api = project.get_opensearch_api()
     dataset_api = project.get_dataset_api()
     downloaded_file_path = dataset_api.download(
         f"Resources/decision-engine/{args.name}/configuration.yml"
@@ -33,7 +37,7 @@ def login_to_project(args):
     with open(downloaded_file_path, "r") as f:
         config = yaml.safe_load(f)
     prefix = "de_" + config["name"] + "_"
-    return project, fs, mr, ms, prefix, config
+    return project, fs, mr, ms, prefix, config, opensearch_api
 
 
 def load_data(fs, prefix, config):
@@ -84,35 +88,83 @@ def compute_td_size(fs, fg_name):
     return ds_size
 
 
-def preprocess_retrieval_train_df(events_df, items_df):
+def preprocess_retrieval_train_df(events_df, items_df, config):
     session_counts = events_df.groupBy("session_id").count()
     multi_interaction_sessions = session_counts.filter(
         session_counts["count"] > 5
     )  # min session length
     filtered_df = events_df.join(multi_interaction_sessions, "session_id", "inner")
     aggregated_df = filtered_df.groupby("session_id").agg(
-        collect_set(col("item_id")).alias("item_ids")
+        collect_set(col("item_id")).alias("context_item_ids")
     )
     retrieval_train_df = aggregated_df.join(
         items_df,
-        col("item_ids").contains(items_df[config["product_list"]["primary_key"]]),
+        col("context_item_ids").contains(items_df[config["product_list"]["primary_key"]]),
         "inner",
     )
     train_df, val_df = retrieval_train_df.randomSplit([0.8, 0.2], seed=123)
-
     train_ds = df_to_ds(train_df).batch(BATCH_SIZE).cache().shuffle(BATCH_SIZE * 10)
     val_ds = df_to_ds(val_df).batch(BATCH_SIZE).cache()
+    # TODO timestamp features needs transformation
     return train_ds, val_ds
 
 
-def train_model(train_ds, val_ds, mr, model_name):
-    mr_model = mr.get_model(name=model_name, version=1)
+class RetrievalModel(tfrs.Model):
+    """
+    Two-tower Retrieval model.
+    """
+
+    def __init__(self, query_model, candidate_model, catalog_ds):
+        super().__init__()
+        self._query_model = query_model
+        self._candidate_model = candidate_model
+
+        self._task = tfrs.tasks.Retrieval(
+            metrics=tfrs.metrics.FactorizedTopK(
+                candidates=catalog_ds.batch(128).map(self._candidate_model)
+            )
+        )
+
+    def compute_loss(self, features, training=False):
+        context_item_ids = features["context_item_ids"]
+        label_item_features = features.drop(columns=["context_item_ids"])
+
+        query_embedding = self._query_model(context_item_ids)
+        candidate_embedding = self._candidate_model(label_item_features)
+
+        return self._task(
+            query_embedding, candidate_embedding, compute_metrics=not training
+        )
+
+
+def train_retrieval_model(catalog_ds, train_ds, val_ds, mr, prefix):
+    mr_query_model = mr.get_model(name=prefix + "query_model", version=1)
+    path = mr_query_model.download()
+    new_query_model = tf.saved_model.load(path)
+    
+    mr_candidate_model = mr.get_model(name=prefix + "candidate_model", version=1)
+    path = mr_candidate_model.download()
+    new_candidate_model = tf.saved_model.load(path)
+    
+    retrieval_model = RetrievalModel(new_query_model, new_candidate_model, catalog_ds) 
+    optimizer = tfa.optimizers.AdamW(0.001, learning_rate=0.01)
+    retrieval_model.compile(optimizer=optimizer)
+    retrieval_model.fit(train_ds, validation_data=val_ds, epochs=5)
+    
+    tf.saved_model.save(new_query_model, prefix + "query_model")
+    tf.saved_model.save(new_candidate_model, prefix + "candidate_model")
+    return new_query_model, new_candidate_model
+
+
+def train_ranking_model(train_ds, val_ds, mr, prefix):
+    mr_model = mr.get_model(name=prefix + "ranking_model", version=1)
     path = mr_model.download()
     new_model = tf.saved_model.load(path)
     optimizer = tfa.optimizers.AdamW(0.001, learning_rate=0.01)
     new_model.compile(optimizer=optimizer)
     new_model.fit(train_ds, validation_data=val_ds, epochs=5)
-    tf.saved_model.save(new_model, "retrained_model")
+    
+    tf.saved_model.save(new_model, prefix + "ranking_model")
     return new_model
 
 
@@ -122,9 +174,7 @@ def preprocess_ranking_train_df(events_df, items_df, config):
             events_df.groupBy("session_id", "item_id")
             .pivot("event_type")
             .agg(sum("event_value"))
-            .fillna(0)
-        )  # fill NaN values with 0
-        # TODO how to agg session features
+        )
         items_scores = events_df_pivoted.withColumn(
             "score",
             expr(config["model_configuration"]["ranking_model"]["policy_config"]),
@@ -135,10 +185,10 @@ def preprocess_ranking_train_df(events_df, items_df, config):
         )
 
     ranking_train_df = items_scores.join(
-        events_df,
-        items_df[config["product_list"]["primary_key"]] == events_df["item_id"],
+        events_df.select("item_id", "session_id", "longtitude", "latitude", "language", "useragent").distinct(), # TODO expensive operation
+        "session_id",
         "inner",
-    )
+    ).join(items_df, items_df[config["product_list"]["primary_key"]] == items_scores["item_id"], "inner")
     train_df, val_df = ranking_train_df.randomSplit([0.8, 0.2], seed=123)
 
     train_ds = df_to_ds(train_df).batch(BATCH_SIZE).cache().shuffle(BATCH_SIZE * 10)
@@ -153,7 +203,7 @@ def save_model_to_registry(model, mr, model_name):
         input_example=model.input_example,
         model_schema=model.model_schema,
     )
-    retrained_model.save("retrained_model")
+    retrained_model.save(model_name)
     logging.info(f"New {model_name} model version is {retrained_model.version}")
     return retrained_model.version
 
@@ -174,12 +224,33 @@ def update_deployment(ms, project, new_version, model_name, deployment_name):
         logging.info(f"deployment.save(await_update=120) failed. {e}")
 
 
+def update_opensearch_index(opensearch_api, config, retrieval_model, prefix):
+    index_name = opensearch_api.get_project_index(config["product_list"]["feature_view_name"])
+    
+    items_ds = tf.data.Dataset.from_tensor_slices({col: items_df[col] for col in items_df})
+    item_embeddings = items_ds.batch(2048).map(
+        lambda x: (x[config['product_list']["primary_key"]], retrieval_model._candidate_model(x))
+    )
+
+    actions = ""
+    for batch in item_embeddings:
+        item_id_list, embedding_list = batch
+        item_id_list = item_id_list.numpy().astype(int)
+        embedding_list = embedding_list.numpy()
+
+        for item_id, embedding in zip(item_id_list, embedding_list):
+            actions += json.dumps({"index": {"_index": index_name, "_id": item_id, "_source": {prefix + "vector": embedding}}}) + "\n"
+            actions += json.dumps({"doc_as_upsert": True}) + "\n"
+
+    client.bulk(actions)
+    
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("name", type=str, help="Name of DE project", default="none")
     args = parser.parse_args()
 
-    project, fs, mr, ms, prefix, config = login_to_project(args)
+    project, fs, mr, ms, prefix, config, opensearch_api = login_to_project(args)
     events_fg, events_df, items_fg, items_df = load_data(fs, prefix, config)
 
     if config["model_configuration"]["retrain"]["type"] == "ratio_threshold":
@@ -199,20 +270,21 @@ if __name__ == "__main__":
 
     # Retrieval model
     train_ds, val_ds = preprocess_retrieval_train_df(events_df, items_df)
-    retrieval_model = train_model(train_ds, val_ds, mr, prefix + "retrieval_model")
-    new_version = save_model_to_registry(retrieval_model, mr, prefix + "retrieval_model")
+    query_model, candidate_model = train_retrieval_model(df_to_ds(items_df), train_ds, val_ds, mr, prefix)
+    new_v_query_model = save_model_to_registry(query_model, mr, prefix + "query_model")
     update_deployment(
         ms,
         project,
-        new_version,
-        prefix + "retrieval_model",
-        (prefix + "retrieval_model").replace("_", "").lower(),
+        new_v_query_model,
+        prefix + "query_model",
+        (prefix + "query_model").replace("_", "").lower(),
     )
-    # TODO Opensearch update index
-
+    new_v_candidate_model = save_model_to_registry(candidate_model, mr, prefix + "candidate_model")
+    update_opensearch_index(opensearch_api, config, candidate_model, prefix)
+            
     # Ranking model
     train_ds, val_ds = preprocess_ranking_train_df(events_df, items_df, config)
-    ranking_model = train_model(train_ds, val_ds, mr, prefix + "ranking_model")
+    ranking_model = train_ranking_model(train_ds, val_ds, mr, prefix)
     new_version = save_model_to_registry(ranking_model, mr, prefix + "ranking_model")
     update_deployment(
         ms,

@@ -10,21 +10,22 @@ class Predict(object):
 
     def __init__(self):
         os.environ["HOPSWORKS_PUBLIC_HOST"] = "hopsworks0.logicalclocks.com"
-        project = hopsworks.login()
+        project = hopsworks.login() 
 
         kafka_api = project.get_kafka_api()
         producer_config = kafka_api.get_default_config()
         producer_config['ssl.endpoint.identification.algorithm'] = 'none'
         self.producer = Producer(producer_config)
 
-        # todo we should use decision_engine_api here, but it needs backend first
         import yaml
         dataset_api = project.get_dataset_api()
-        downloaded_file_path = dataset_api.download("Resources/test_config.yml")
+        downloaded_file_path = dataset_api.download(
+            f"Resources/decision-engine/h_and_m/configuration.yml" # TODO remove hardcode - how to pass args to predictor?
+        )
         with open(downloaded_file_path, "r") as f:
             config = yaml.safe_load(f)
 
-        self.kafka_topic = '_'.join([project.name, config['name'], "logObservations"])
+        self.kafka_topic = '_'.join([project.name, config['name'], "events"])
 
     def produce_to_kafka(self, data):
         try:
