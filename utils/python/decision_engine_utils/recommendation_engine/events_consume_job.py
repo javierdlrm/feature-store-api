@@ -6,13 +6,13 @@ import logging
 import hopsworks
 import argparse
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, LongType, StringType, BooleanType
+from pyspark.sql.types import StructType, StructField, LongType, StringType, TimestampType, DoubleType
 from pyspark.sql.functions import from_json
 from hsfs.feature import Feature
 
 # Setting up argparse
 parser = argparse.ArgumentParser()
-parser.add_argument("name", type=str, help="Name of DE project", default='none')
+parser.add_argument("-name", type=str, help="Name of DE project", default='none')
 args = parser.parse_args()
 
 logging.basicConfig(level=logging.INFO)
@@ -29,12 +29,6 @@ downloaded_file_path = dataset_api.download(f"Resources/decision-engine/{args.na
 with open(downloaded_file_path, "r") as f:
     config = yaml.safe_load(f)
 prefix = 'de_' + config['name'] + '_'
-
-labels = config['observations']['labels']
-context_features = config['observations']['features']
-num_items = config['observations']['num_last_visited_items']
-
-events_fv = fs.get_feature_view(name=prefix + "events")
 
 from hsfs import engine
 
@@ -54,13 +48,13 @@ df_read = spark \
 struct_fields = StructType([
     StructField("event_id", LongType(), nullable=True),
     StructField("session_id", StringType(), nullable=True),
-    StructField("event_timestamp", LongType(), nullable=True),  # Assume microseconds?
+    StructField("event_timestamp", TimestampType(), nullable=True),
     StructField("item_id", StringType(), nullable=True),
     StructField("event_type", StringType(), nullable=True),
     StructField("event_value", DoubleType(), nullable=True),
     StructField("event_weight", DoubleType(), nullable=True),
-    StructField("longitude", LongType(), nullable=True),
-    StructField("latitude", LongType(), nullable=True),
+    StructField("longitude", DoubleType(), nullable=True),
+    StructField("latitude", DoubleType(), nullable=True),
     StructField("language", StringType(), nullable=True),
     StructField("useragent", StringType(), nullable=True)
 ])
@@ -73,7 +67,7 @@ df_deser = df_read.selectExpr("CAST(value AS STRING)") \
     .select("value.event_id", "value.session_id", "value.event_timestamp", "value.item_id",
             "value.event_type", "value.event_value", "value.event_weight",
             "value.longitude", "value.latitude", "value.language", "value.useragent") \
-    .selectExpr("CAST(event_id AS long)", "CAST(session_id AS string)", "CAST(event_timestamp AS long)",
+    .selectExpr("CAST(event_id AS long)", "CAST(session_id AS string)", "CAST(event_timestamp AS timestamp)",
                 "CAST(item_id AS string)", "CAST(event_type AS string)", "CAST(event_value AS double)",
                 "CAST(event_weight AS double)", "CAST(longitude AS long)", "CAST(latitude AS long)",
                 "CAST(language AS string)", "CAST(useragent AS string)")

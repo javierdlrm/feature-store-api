@@ -126,8 +126,8 @@ class RetrievalModel(tfrs.Model):
         )
 
     def compute_loss(self, features, training=False):
-        context_item_ids = features["context_item_ids"]
-        label_item_features = features.drop(columns=["context_item_ids"])
+        context_item_ids = features.pop("context_item_ids")
+        label_item_features = features
 
         query_embedding = self._query_model(context_item_ids)
         candidate_embedding = self._candidate_model(label_item_features)
@@ -209,7 +209,7 @@ def save_model_to_registry(model, mr, model_name):
 
 
 def update_deployment(ms, project, new_version, model_name, deployment_name):
-    deployment = ms.get_deployment()
+    deployment = ms.get_deployment(deployment_name)
     deployment.model_version = new_version
     deployment.artifact_version = "CREATE"
     deployment.script_file = os.path.join(
@@ -247,7 +247,7 @@ def update_opensearch_index(opensearch_api, config, retrieval_model, prefix):
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("name", type=str, help="Name of DE project", default="none")
+    parser.add_argument("-name", type=str, help="Name of DE project", default="none")
     args = parser.parse_args()
 
     project, fs, mr, ms, prefix, config, opensearch_api = login_to_project(args)
