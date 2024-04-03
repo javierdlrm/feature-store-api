@@ -40,7 +40,7 @@ df_read = spark \
     .readStream \
     .format("kafka") \
     .options(**kafka_config) \
-    .option("startingOffsets", "latest") \
+    .option("startingOffsets", "earliest") \
     .option("subscribe", topic_name) \
     .load()
 
@@ -69,7 +69,7 @@ df_deser = df_read.selectExpr("CAST(value AS STRING)") \
             "value.longitude", "value.latitude", "value.language", "value.useragent") \
     .selectExpr("CAST(event_id AS long)", "CAST(session_id AS string)", "CAST(event_timestamp AS timestamp)",
                 "CAST(item_id AS string)", "CAST(event_type AS string)", "CAST(event_value AS double)",
-                "CAST(event_weight AS double)", "CAST(longitude AS long)", "CAST(latitude AS long)",
+                "CAST(event_weight AS double)", "CAST(longitude AS double)", "CAST(latitude AS double)",
                 "CAST(language AS string)", "CAST(useragent AS string)")
 
 events_fg = fs.get_feature_group(prefix + "events")

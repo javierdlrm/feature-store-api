@@ -1,5 +1,6 @@
 import argparse
 import json
+import hopsworks
 import hsfs
 
 from hsfs.constructor import query
@@ -22,14 +23,10 @@ def read_job_conf(path: str) -> Dict[Any, Any]:
 
 def setup_decision_engine(job_conf: Dict[Any, Any]):
 
-    from hopsworks.engine import decision_engine_engine
-
-    # feature_store = job_conf.pop("feature_store")
-    # fs = get_feature_store_handle(feature_store)
-
-    d = decision_engine_engine.DecisionEngineEngine()
-    d.setup_decision_engine(job_conf)
-
+    prj = get_project_handle()
+    de_api = prj.get_decision_engine_api()
+    de = de_api.get_by_name(job_conf['name'])
+    de.setup()
 
 def setup_spark() -> SparkSession:
     return SparkSession.builder.enableHiveSupport().getOrCreate()
@@ -38,6 +35,10 @@ def setup_spark() -> SparkSession:
 def get_feature_store_handle(feature_store: str = "") -> hsfs.feature_store:
     connection = hsfs.connection()
     return connection.get_feature_store(feature_store)
+
+def get_project_handle():
+    project = hopsworks.login()
+    return project
 
 
 def sort_schema(fg_schema: StructType, csv_df_schema: StructType) -> StructType:

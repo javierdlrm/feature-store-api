@@ -10,6 +10,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import collect_set, col, expr
 import tensorflow as tf
 import tensorflow_addons as tfa
+import tensorflow_recommenders as tfrs
 
 from opensearchpy import OpenSearch
 
@@ -185,7 +186,7 @@ def preprocess_ranking_train_df(events_df, items_df, config):
         )
 
     ranking_train_df = items_scores.join(
-        events_df.select("item_id", "session_id", "longtitude", "latitude", "language", "useragent").distinct(), # TODO expensive operation
+        events_df.select("item_id", "session_id", "longitude", "latitude", "language", "useragent").distinct(), # TODO expensive operation
         "session_id",
         "inner",
     ).join(items_df, items_df[config["product_list"]["primary_key"]] == items_scores["item_id"], "inner")
@@ -212,11 +213,11 @@ def update_deployment(ms, project, new_version, model_name, deployment_name):
     deployment = ms.get_deployment(deployment_name)
     deployment.model_version = new_version
     deployment.artifact_version = "CREATE"
-    deployment.script_file = os.path.join(
-        "/Projects", project.name, "Resources", f"{model_name}_predictor.py"
-    ).replace("\\", "/")
+    # deployment.script_file = os.path.join( # why is it here?
+    #     "/Projects", project.name, "Resources", f"{model_name}_predictor.py"
+    # ).replace("\\", "/")
 
-    logging.info(f"New deployment properties: {deployment.to_dict()}")
+    logging.info(f"New deployment properties: {deployment.to_dict()}") # explain this line of the code?
 
     try:
         deployment.save(await_update=120)
@@ -242,6 +243,7 @@ def update_opensearch_index(opensearch_api, config, retrieval_model, prefix):
             actions += json.dumps({"index": {"_index": index_name, "_id": item_id, "_source": {prefix + "vector": embedding}}}) + "\n"
             actions += json.dumps({"doc_as_upsert": True}) + "\n"
 
+    client = OpenSearch(**opensearch_api.get_default_py_config())
     client.bulk(actions)
     
     
