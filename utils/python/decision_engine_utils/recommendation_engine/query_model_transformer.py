@@ -12,10 +12,10 @@ class Transformer(object):
             "Resources/decision-engine/h_and_m/configuration.yml" # TODO remove hardcode - how to pass args to transformer?
         )
         with open(downloaded_file_path, "r") as f:
-            config = yaml.safe_load(f)
-        prefix = "de_" + config["name"] + "_"
+            self.config = yaml.safe_load(f)
+        self.prefix = "de_" + self.config["name"] + "_"
     
-        self.ranking_server = ms.get_deployment((prefix + "ranking_deployment").replace("_", "").lower())
+        self.ranking_server = ms.get_deployment((self.prefix + "ranking_deployment").replace("_", "").lower())
         self.inputs = None
         
     def preprocess(self, inputs): 
@@ -31,7 +31,7 @@ class Transformer(object):
             pk_col = self.config['product_list']['primary_key']
             context_item_ids = items_fg.select([pk_col]).show(5)[pk_col].tolist()
 
-        model_input = [{'context_item_ids': context_item_ids}]
+        model_input = [{'context_item_ids': list(map(str, context_item_ids))}]
         print("model input: ", model_input)
         return model_input
     
