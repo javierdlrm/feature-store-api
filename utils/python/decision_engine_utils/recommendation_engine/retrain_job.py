@@ -16,6 +16,7 @@ except ModuleNotFoundError:
     print("module 'tensorflow-recommenders' is not installed")
     import pip
     pip.main(['install', 'tensorflow-recommenders'])
+    import tensorflow_recommenders as tfrs
 
 from opensearchpy import OpenSearch
 from xgboost import XGBRegressor
