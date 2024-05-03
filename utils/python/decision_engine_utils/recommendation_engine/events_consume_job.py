@@ -1,8 +1,6 @@
-# The job for consuming events from Kafka topic. Runs on schedule, inserts stream into observations FG. 
-# On the first run, autodetects event schema and creates "observations" FG, "training" FV and empty training dataset.
-
 # naming conventions here are fucked tbh
 import logging
+import time
 import hopsworks
 import argparse
 from pyspark.sql import SparkSession
@@ -34,7 +32,7 @@ from hsfs import engine
 
 kafka_config = engine.get_instance()._get_kafka_config(feature_store_id=fs.id)
 topic_name = '_'.join([project.name, config['name'], "events"])
-
+print(topic_name)
 logging.info("Creating Spark df")
 df_read = spark \
     .readStream \
@@ -74,3 +72,18 @@ df_deser = df_read.selectExpr("CAST(value AS STRING)") \
 
 events_fg = fs.get_feature_group(prefix + "events")
 fg_stream_query = events_fg.insert_stream(df_deser)
+# print(fg_stream_query.status)
+time.sleep(60) 
+
+while fg_stream_query.status['isDataAvailable']:
+    print(fg_stream_query.status)
+    time.sleep(10) 
+
+print("Data processing completed.")
+fg_stream_query.stop()
+spark.stop()
+
+print("Populating offline FG.")
+jb = project.get_jobs_api()
+job = jb.get_job(prefix + "events_1_offline_fg_materialization")
+execution = job.run()
