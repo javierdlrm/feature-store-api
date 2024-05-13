@@ -10,14 +10,6 @@ import numpy as np
 
 import tensorflow as tf
 
-try:
-    import tensorflow_recommenders as tfrs
-except ModuleNotFoundError:
-    print("module 'tensorflow-recommenders' is not installed")
-    import pip
-    pip.main(['install', 'tensorflow-recommenders'])
-    import tensorflow_recommenders as tfrs
-
 from opensearchpy import OpenSearch
 from xgboost import XGBRegressor
 import joblib
@@ -27,8 +19,6 @@ from hsml.client.exceptions import ModelServingException
 from hopsworks.engine import decision_engine_model
 
 logging.basicConfig(level=logging.INFO)
-BATCH_SIZE = 2048
-
 
 def df_to_ds(df, pad_length=10):
     features = {
@@ -181,70 +171,6 @@ def preprocess_retrieval_train_df(events_df, items_df, config):
 
     return train_ds, val_ds
 
-
-class TwoTowerModel(tf.keras.Model):
-    def __init__(self, query_model, item_model, item_ds):
-        super().__init__()
-        self.query_model = query_model
-        self.item_model = item_model
-        self.task = tfrs.tasks.Retrieval(
-            metrics=tfrs.metrics.FactorizedTopK(
-                candidates=item_ds.batch(BATCH_SIZE).map(self.item_model)
-            )
-        )
-
-    def train_step(self, batch) -> tf.Tensor:
-        # Set up a gradient tape to record gradients.
-        with tf.GradientTape() as tape:
-            # Loss computation.
-            item_embeddings = self.item_model(batch)
-            user_embeddings = self.query_model.compute_emb(batch)['query_emb']
-            loss = self.task(
-                user_embeddings,
-                item_embeddings,
-                compute_metrics=False,
-            )
-
-            # Handle regularization losses as well.
-            regularization_loss = sum(self.losses)
-
-            total_loss = loss + regularization_loss
-
-        gradients = tape.gradient(total_loss, self.trainable_variables)
-        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-
-        metrics = {
-            "loss": loss,
-            "regularization_loss": regularization_loss,
-            "total_loss": total_loss,
-        }
-
-        return metrics
-
-    def test_step(self, batch) -> tf.Tensor:
-        # Loss computation.
-        item_embeddings = self.item_model(batch)
-        user_embeddings = self.query_model(batch)['query_emb']
-
-        loss = self.task(
-            user_embeddings,
-            item_embeddings,
-            compute_metrics=False,
-        )
-
-        # Handle regularization losses as well.
-        regularization_loss = sum(self.losses)
-
-        total_loss = loss + regularization_loss
-
-        metrics = {metric.name: metric.result() for metric in self.metrics}
-        metrics["loss"] = loss
-        metrics["regularization_loss"] = regularization_loss
-        metrics["total_loss"] = total_loss
-
-        return metrics
-
-
 def train_retrieval_model(catalog_df, train_ds, val_ds, configs_dict):
     catalog_config = configs_dict["product_list"]
     retrieval_config = configs_dict["model_configuration"]["retrieval_model"]
@@ -267,7 +193,7 @@ def train_retrieval_model(catalog_df, train_ds, val_ds, configs_dict):
         configs_dict, pk_index_list, categories_lists
     )
 
-    model = TwoTowerModel(new_query_model, new_candidate_model, train_ds)
+    model = decision_engine_model.TwoTowerModel(new_query_model, new_candidate_model, train_ds)
     # Define an optimizer using AdamW with a learning rate of 0.01
     optimizer = tf.keras.optimizers.Adam(weight_decay=0.001, learning_rate=0.01)
     # Compile the model using the specified optimizer
@@ -284,7 +210,7 @@ def train_retrieval_model(catalog_df, train_ds, val_ds, configs_dict):
         ),
     }
 
-    signatures = query_model.compute_emb.get_concrete_function(
+    signatures = new_query_model.compute_emb.get_concrete_function(
         instances_spec
     )
     tf.saved_model.save(model.query_model, "query_model", signatures=signatures)
@@ -321,16 +247,15 @@ def preprocess_ranking_train_df(events_df, items_df, config):
             fill_value=0
         ).reset_index()
 
-        event_types = ["click", "add_to_cart", "purchase"] # TODO extract from config file
+        event_types = list(config["session"]['events'].keys())
         for event_type in event_types:
             if event_type not in items_scores.columns:
-                items_scores[event_type] = 0 if event_type != 'purchase' else 0.1 # TODO hardcode because expression has log()
+                items_scores[event_type] = 0
                 
         policy_expr = config["model_configuration"]["ranking_model"]["policy_config"]
         items_scores['score'] = items_scores.eval(policy_expr)
     else:
-        pass
-#         items_scores = events_df.groupby(['session_id', 'item_id'])['event_weight'].transform('sum') TODO fix this case handling
+        items_scores = events_df.groupby(['session_id', 'item_id'])['event_weight'].transform('sum') 
 
     events_df_unique = events_df[['item_id', 'session_id', 'longitude', 'latitude', 'language', 'useragent']].drop_duplicates()
     
@@ -344,7 +269,6 @@ def save_model_to_registry(mr, prefix, model_name, description):
     retrained_model = mr.tensorflow.create_model(
         name=prefix + model_name,
         description=description,
-        #         model_schema=current_model.model_schema, TODO: must be ModelSchema object, receiving dict
     )
     retrained_model.save(model_name)
     logging.info(

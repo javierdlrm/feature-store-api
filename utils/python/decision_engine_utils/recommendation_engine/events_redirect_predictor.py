@@ -4,6 +4,7 @@ import hopsworks
 import json
 import os
 import logging
+import yaml
 
 
 class Predict(object):
@@ -17,11 +18,11 @@ class Predict(object):
         producer_config['ssl.endpoint.identification.algorithm'] = 'none'
         self.producer = Producer(producer_config)
 
-        import yaml
         dataset_api = project.get_dataset_api()
-        downloaded_file_path = dataset_api.download(
-            f"Resources/decision-engine/h_and_m/configuration.yml" # TODO remove hardcode - how to pass args to predictor?
-        )
+        de_api = project.get_decision_engine_api()
+        decision_engine = de_api.get_by_name(os.getenv('MODEL_NAME').removeprefix('de_').removesuffix('_events_redirect'))
+        downloaded_file_path = dataset_api.download(decision_engine._config_file_path, overwrite=True)
+
         with open(downloaded_file_path, "r") as f:
             config = yaml.safe_load(f)
 
