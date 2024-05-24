@@ -975,6 +975,44 @@ class TestPython:
         )
         assert mock_python_engine_convert_pandas_statistics.call_count == 3
 
+    def test_profile_pandas_with_null_column(self, mocker):
+        # Arrange
+        mock_python_engine_convert_pandas_statistics = mocker.patch(
+            "hsfs.engine.python.Engine._convert_pandas_statistics"
+        )
+
+        python_engine = python.Engine()
+
+        mock_python_engine_convert_pandas_statistics.side_effect = [
+            {"dataType": "Integral", "test_key": "test_value"},
+            {"dataType": "Fractional", "test_key": "test_value"},
+            {"dataType": "String", "test_key": "test_value"},
+        ]
+
+        d = {"col1": [1, 2], "col2": [0.1, None], "col3": [None, None]}
+        df = pd.DataFrame(data=d)
+
+        # Act
+        result = python_engine.profile(
+            df=df,
+            relevant_columns=None,
+            correlations=None,
+            histograms=None,
+            exact_uniqueness=True,
+        )
+
+        # Assert
+        assert (
+            result
+            == '{"columns": [{"dataType": "Integral", "test_key": "test_value", "isDataTypeInferred": "false", '
+            '"column": "col1", "completeness": 1}, '
+            '{"dataType": "Fractional", "test_key": "test_value", "isDataTypeInferred": "false", '
+            '"column": "col2", "completeness": 1}, '
+            '{"dataType": "String", "test_key": "test_value", "isDataTypeInferred": "false", '
+            '"column": "col3", "completeness": 1}]}'
+        )
+        assert mock_python_engine_convert_pandas_statistics.call_count == 3
+
     def test_profile_polars(self, mocker):
         # Arrange
         mock_python_engine_convert_pandas_statistics = mocker.patch(
@@ -990,6 +1028,44 @@ class TestPython:
         ]
 
         d = {"col1": [1, 2], "col2": [0.1, 0.2], "col3": ["a", "b"]}
+        df = pl.DataFrame(data=d)
+
+        # Act
+        result = python_engine.profile(
+            df=df,
+            relevant_columns=None,
+            correlations=None,
+            histograms=None,
+            exact_uniqueness=True,
+        )
+
+        # Assert
+        assert (
+            result
+            == '{"columns": [{"dataType": "Integral", "test_key": "test_value", "isDataTypeInferred": "false", '
+            '"column": "col1", "completeness": 1}, '
+            '{"dataType": "Fractional", "test_key": "test_value", "isDataTypeInferred": "false", '
+            '"column": "col2", "completeness": 1}, '
+            '{"dataType": "String", "test_key": "test_value", "isDataTypeInferred": "false", '
+            '"column": "col3", "completeness": 1}]}'
+        )
+        assert mock_python_engine_convert_pandas_statistics.call_count == 3
+
+    def test_profile_polars_with_null_column(self, mocker):
+        # Arrange
+        mock_python_engine_convert_pandas_statistics = mocker.patch(
+            "hsfs.engine.python.Engine._convert_pandas_statistics"
+        )
+
+        python_engine = python.Engine()
+
+        mock_python_engine_convert_pandas_statistics.side_effect = [
+            {"dataType": "Integral", "test_key": "test_value"},
+            {"dataType": "Fractional", "test_key": "test_value"},
+            {"dataType": "String", "test_key": "test_value"},
+        ]
+
+        d = {"col1": [1, 2], "col2": [0.1, None], "col3": [None, None]}
         df = pl.DataFrame(data=d)
 
         # Act
@@ -1267,6 +1343,26 @@ class TestPython:
         assert (
             mock_warnings.call_args[0][0]
             == "The ingested dataframe contains upper case letters in feature names: `['Col1']`. Feature names are sanitized to lower case in the feature store."
+        )
+
+    def test_convert_to_default_dataframe_pandas_with_spaces(self, mocker):
+        # Arrange
+        mock_warnings = mocker.patch("warnings.warn")
+
+        python_engine = python.Engine()
+
+        d = {"col 1": [1, 2], "co 2 co": [3, 4]}
+        df = pd.DataFrame(data=d)
+
+        # Act
+        result = python_engine.convert_to_default_dataframe(dataframe=df)
+
+        # Assert
+        assert result.columns.values.tolist() == ["col_1", "co_2_co"]
+        assert (
+            mock_warnings.call_args[0][0]
+            == "The ingested dataframe contains feature names with spaces: `['col 1', 'co 2 co']`. "
+            "Feature names are sanitized to use underscore '_' in the feature store."
         )
 
     def test_convert_to_default_dataframe_polars(self, mocker):
@@ -2859,7 +2955,7 @@ class TestPython:
         assert mock_td_api.return_value.compute.call_count == 0
         assert mock_python_engine_wait_for_job.call_count == 0
 
-    def test_write_training_dataset_query_td(self, mocker):
+    def test_write_training_dataset_query_td(self, mocker, backend_fixtures):
         # Arrange
         mocker.patch("hsfs.engine.get_type")
         mocker.patch("hsfs.core.training_dataset_job_conf.TrainingDatasetJobConf")
@@ -2873,7 +2969,10 @@ class TestPython:
 
         python_engine = python.Engine()
 
-        q = query.Query(None, None)
+        fg = feature_group.FeatureGroup.from_response_json(
+            backend_fixtures["feature_group"]["get"]["response"]
+        )
+        q = query.Query(fg, fg.features)
 
         td = training_dataset.TrainingDataset(
             name="test",
@@ -2900,7 +2999,7 @@ class TestPython:
         assert mock_td_api.return_value.compute.call_count == 1
         assert mock_job._wait_for_job.call_count == 1
 
-    def test_write_training_dataset_query_fv(self, mocker):
+    def test_write_training_dataset_query_fv(self, mocker, backend_fixtures):
         # Arrange
         mocker.patch("hsfs.engine.get_type")
         mocker.patch("hsfs.core.training_dataset_job_conf.TrainingDatasetJobConf")
@@ -2913,7 +3012,10 @@ class TestPython:
 
         python_engine = python.Engine()
 
-        q = query.Query(None, None)
+        fg = feature_group.FeatureGroup.from_response_json(
+            backend_fixtures["feature_group"]["get"]["response"]
+        )
+        q = query.Query(fg, fg.features)
 
         td = training_dataset.TrainingDataset(
             name="test",
@@ -3599,11 +3701,62 @@ class TestPython:
         # Assert
         assert mock_python_engine_kafka_produce.call_count == 4
         job_mock.run.assert_called_once_with(
+            args="defaults",
+            await_termination=False,
+        )
+    
+    def test_materialization_kafka_skip_offsets(self, mocker):
+        # Arrange
+        mocker.patch("hsfs.engine.python.Engine._get_kafka_config", return_value={})
+        mocker.patch("hsfs.feature_group.FeatureGroup._get_encoded_avro_schema")
+        mocker.patch("hsfs.engine.python.Engine._get_encoder_func")
+        mocker.patch("hsfs.engine.python.Engine._encode_complex_features")
+        mock_python_engine_kafka_produce = mocker.patch(
+            "hsfs.engine.python.Engine._kafka_produce"
+        )
+        mocker.patch("hsfs.util.get_job_url")
+        mocker.patch(
+            "hsfs.engine.python.Engine._kafka_get_offsets",
+            return_value=" tests_offsets",
+        )
+
+        python_engine = python.Engine()
+
+        fg = feature_group.FeatureGroup(
+            name="test",
+            version=1,
+            featurestore_id=99,
+            primary_key=[],
+            partition_key=[],
+            id=10,
+            stream=False,
+            time_travel_format="HUDI",
+        )
+
+        mocker.patch.object(fg, "commit_details", return_value={"commit1": 1})
+
+        fg._online_topic_name = "test_topic"
+        job_mock = mocker.MagicMock()
+        job_mock.config = {"defaultArgs": "defaults"}
+        fg._materialization_job = job_mock
+
+        df = pd.DataFrame(data={"col1": [1, 2, 2, 3]})
+
+        # Act
+        python_engine._write_dataframe_kafka(
+            feature_group=fg,
+            dataframe=df,
+            offline_write_options={"start_offline_materialization": True, "skip_offsets": True},
+        )
+
+        # Assert
+        assert mock_python_engine_kafka_produce.call_count == 4
+        job_mock.run.assert_called_once_with(
             args="defaults tests_offsets",
             await_termination=False,
         )
 
-    def test_materialization_kafka_offset_reset(self, mocker):
+    def test_materialization_kafka_topic_doesnt_exist(self, mocker):
         # Arrange
         mocker.patch("hsfs.engine.python.Engine._get_kafka_config", return_value={})
         mocker.patch("hsfs.feature_group.FeatureGroup._get_encoded_avro_schema")

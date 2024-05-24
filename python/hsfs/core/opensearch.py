@@ -13,17 +13,122 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 #
+from __future__ import annotations
 
 import logging
 import re
+from functools import wraps
 
+import opensearchpy
+import urllib3
 from hsfs import client
 from hsfs.client.exceptions import FeatureStoreException, VectorDatabaseException
 from hsfs.core.opensearch_api import OpenSearchApi
+from opensearchpy import OpenSearch
+from opensearchpy.exceptions import (
+    AuthenticationException,
+    ConnectionError,
+    ConnectionTimeout,
+    RequestError,
+)
+from retrying import retry
+
+
+def _is_timeout(exception):
+    return isinstance(exception, urllib3.exceptions.ReadTimeoutError) or isinstance(
+        exception, ConnectionTimeout
+    )
+
+
+def _handle_opensearch_exception(func):
+    @wraps(func)
+    def error_handler_wrapper(*args, **kw):
+        try:
+            return func(*args, **kw)
+        except (ConnectionError, AuthenticationException):
+            # OpenSearchConnectionError occurs when connection is closed.
+            # OpenSearchAuthenticationException occurs when jwt is expired
+            OpenSearchClientSingleton()._refresh_opensearch_connection()
+            return func(*args, **kw)
+        except RequestError as e:
+            caused_by = e.info.get("error") and e.info["error"].get("caused_by")
+            if caused_by and caused_by["type"] == "illegal_argument_exception":
+                raise OpenSearchClientSingleton()._create_vector_database_exception(
+                    caused_by["reason"]) from e
+            raise VectorDatabaseException(
+                VectorDatabaseException.OTHERS,
+                f"Error in Opensearch request: {e}",
+                e.info,
+            ) from e
+        except Exception as e:
+            if _is_timeout(e):
+                raise FeatureStoreException(
+                    OpenSearchClientSingleton.TIMEOUT_ERROR_MSG
+                ) from e
+            else:
+                raise e
+
+    return error_handler_wrapper
+
+
+class OpensearchRequestOption:
+    DEFAULT_OPTION_MAP = {
+        "timeout": "30s",
+    }
+
+    DEFAULT_OPTION_MAP_V2_3 = {
+        # starting from opensearch client v2.3, timeout should be in int/float
+        # https://github.com/opensearch-project/opensearch-py/pull/394
+        "timeout": 30,
+    }
+
+    @classmethod
+    def get_version(cls):
+        return opensearchpy.__version__[0:2]
+
+    @classmethod
+    def get_options(cls, options: dict):
+        """
+        Construct a map of options for the request to the vector database.
+
+        Args:
+            options (dict): The options used for the request to the vector database.
+                The keys are attribute values of the OpensearchRequestOption class.
+
+        Returns:
+            dict: A dictionary containing the constructed options map, where keys represent
+            attribute values of the OpensearchRequestOption class, and values are obtained
+            either from the provided options or default values if not available.
+        """
+        default_option = (cls.DEFAULT_OPTION_MAP
+                          if cls.get_version() < (2, 3)
+                          else cls.DEFAULT_OPTION_MAP_V2_3)
+        if options:
+            # make lower case to avoid issues with cases
+            options = {k.lower(): v for k, v in options.items()}
+            new_options = {}
+            for option, value in default_option.items():
+                if option in options:
+                    if (option == "timeout"
+                        and cls.get_version() < (2, 3)
+                        and isinstance(options[option], int)
+                    ):
+                        new_options[option] = f"{options[option]}s"
+                    else:
+                        new_options[option] = options[option]
+                else:
+                    new_options[option] = value
+            return new_options
+        else:
+            return default_option
 
 
 class OpenSearchClientSingleton:
     _instance = None
+
+    TIMEOUT_ERROR_MSG = """
+    Cannot fetch results from Opensearch due to timeout. It is because the server is busy right now or longer time is needed to reload a large index. Try and increase the timeout limit by providing the parameter `options={"timeout": 60}` in the method `find_neighbor` or `count`.
+    """
 
     def __new__(cls):
         if not cls._instance:
@@ -34,28 +139,6 @@ class OpenSearchClientSingleton:
 
     def _setup_opensearch_client(self):
         if not self._opensearch_client:
-            try:
-                from opensearchpy import OpenSearch
-                from opensearchpy.exceptions import (
-                    AuthenticationException as OpenSearchAuthenticationException,
-                )
-                from opensearchpy.exceptions import (
-                    ConnectionError as OpenSearchConnectionError,
-                )
-                from opensearchpy.exceptions import (
-                    RequestError as RequestError,
-                )
-
-                self.OpenSearchConnectionError = OpenSearchConnectionError
-                self.OpenSearchAuthenticationException = (
-                    OpenSearchAuthenticationException
-                )
-                self.RequestError = RequestError
-
-            except ModuleNotFoundError as err:
-                raise FeatureStoreException(
-                    "hopsworks and opensearchpy are required for embedding similarity search"
-                ) from err
             # query log is at INFO level
             # 2023-11-24 15:10:49,470 INFO: POST https://localhost:9200/index/_search [status:200 request:0.041s]
             logging.getLogger("opensearchpy").setLevel(logging.WARNING)
@@ -71,23 +154,26 @@ class OpenSearchClientSingleton:
         self._opensearch_client = None
         self._setup_opensearch_client()
 
-    def search(self, index=None, body=None):
-        try:
-            return self._opensearch_client.search(body=body, index=index)
-        except (self.OpenSearchConnectionError, self.OpenSearchAuthenticationException):
-            # OpenSearchConnectionError occurs when connection is closed.
-            # OpenSearchAuthenticationException occurs when jwt is expired
-            self._refresh_opensearch_connection()
-            return self._opensearch_client.search(body=body, index=index)
-        except self.RequestError as e:
-            caused_by = e.info.get("error") and e.info["error"].get("caused_by")
-            if caused_by and caused_by["type"] == "illegal_argument_exception":
-                raise self._create_vector_database_exception(caused_by["reason"]) from e
-            raise VectorDatabaseException(
-                VectorDatabaseException.OTHERS,
-                f"Error in Opensearch request: {e}",
-                e.info,
-            )  from e
+    @retry(
+        wait_exponential_multiplier=1000,
+        stop_max_attempt_number=5,
+        retry_on_exception=_is_timeout,
+    )
+    @_handle_opensearch_exception
+    def search(self, index=None, body=None, options=None):
+        return self._opensearch_client.search(body=body, index=index, params=OpensearchRequestOption.get_options(options))
+
+    @retry(
+        wait_exponential_multiplier=1000,
+        stop_max_attempt_number=5,
+        retry_on_exception=_is_timeout,
+    )
+    @_handle_opensearch_exception
+    def count(self, index, body=None, options=None):
+        result = self._opensearch_client.count(
+            index=index, body=body, params=OpensearchRequestOption.get_options(options)
+        )
+        return result["count"]
 
     def close(self):
         if self._opensearch_client:

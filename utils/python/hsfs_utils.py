@@ -1,15 +1,17 @@
+from __future__ import annotations
+
 import argparse
 import json
 import hopsworks
-import hsfs
+from typing import Any, Dict
 
+import hsfs
 from hsfs.constructor import query
-from typing import Dict, Any
+from hsfs.core import feature_monitoring_config_engine, feature_view_engine
+from hsfs.statistics_config import StatisticsConfig
 from pydoop import hdfs
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, _parse_datatype_string, StructField
-from hsfs.core import feature_view_engine
-from hsfs.statistics_config import StatisticsConfig
+from pyspark.sql.types import StructField, StructType, _parse_datatype_string
 
 
 def read_job_conf(path: str) -> Dict[Any, Any]:
@@ -224,6 +226,16 @@ if __name__ == "__main__":
         "-path",
         type=str,
         help="Location on HopsFS of the JSON containing the full configuration",
+    )
+
+    def parse_isoformat_date(da: str) -> datetime:
+        # 'Z' is supported in Python 3.11+ so we need to replace it in 3.10
+        return datetime.fromisoformat(da.replace("Z", "+00:00"))
+
+    parser.add_argument(
+        "-start_time",
+        type=parse_isoformat_date,
+        help="Job start time",
     )
 
     args = parser.parse_args()

@@ -13,6 +13,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 #
+from __future__ import annotations
 
 import json
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ from hsfs import (
     util,
 )
 from hsfs.client.exceptions import FeatureStoreException
+from hsfs.core.vector_db_client import VectorDbClient
 
 
 class SimilarityFunctionType:
@@ -39,6 +41,10 @@ class SimilarityFunctionType:
     L2 = "l2_norm"
     COSINE = "cosine"
     DOT_PRODUCT = "dot_product"
+
+    def __init__(self) -> None:
+        # Fix for the doc
+        raise NotImplementedError("This class should not be instantiated.")
 
 
 @dataclass
@@ -257,6 +263,7 @@ class EmbeddingIndex:
             self._features = dict([(feat.name, feat) for feat in features])
         self._feature_group = None
         self._col_prefix = col_prefix
+        self._vector_db_client = None
 
     def add_embedding(
         self,
@@ -301,7 +308,11 @@ class EmbeddingIndex:
         # Returns
             `hsfs.embedding.EmbeddingFeature` object
         """
-        return self._features.get(name)
+        feat = self._features.get(name)
+        if feat:
+            feat.feature_group = self._feature_group
+            feat.embedding_index = self
+        return feat
 
     def get_embeddings(self):
         """
@@ -314,6 +325,25 @@ class EmbeddingIndex:
             feat.feature_group = self._feature_group
             feat.embedding_index = self
         return self._features.values()
+
+    def count(self, options: map = None):
+        """
+        Count the number of records in the feature group.
+
+        # Arguments
+            options: The options used for the request to the vector database.
+                The keys are attribute values of the `hsfs.core.opensearch.OpensearchRequestOption` class.
+
+        # Returns
+            int: The number of records in the feature group.
+
+        # Raises:
+            ValueError: If the feature group is not initialized.
+            FeaturestoreException: If an error occurs during the count operation.
+        """
+        if self._vector_db_client is None:
+            self._vector_db_client = VectorDbClient(self._feature_group.select_all())
+        return self._vector_db_client.count(self.feature_group, options=options)
 
     @classmethod
     def from_response_json(cls, json_dict):
@@ -360,7 +390,7 @@ class EmbeddingIndex:
         """
         return {
             "indexName": self._index_name,
-            "features": list(self._features.values()),
+            "features": [feature.to_dict() for feature in self._features.values()],
             "colPrefix": self._col_prefix,
         }
 
