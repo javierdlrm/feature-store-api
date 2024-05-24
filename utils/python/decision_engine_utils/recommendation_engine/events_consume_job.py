@@ -11,6 +11,7 @@ from hsfs.feature import Feature
 # Setting up argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("-name", type=str, help="Name of DE project", default='none')
+parser.add_argument("-start_time", default=None)  # to be ignored
 args = parser.parse_args()
 
 logging.basicConfig(level=logging.INFO)
@@ -72,18 +73,15 @@ df_deser = df_read.selectExpr("CAST(value AS STRING)") \
 
 events_fg = fs.get_feature_group(prefix + "events")
 fg_stream_query = events_fg.insert_stream(df_deser)
-# print(fg_stream_query.status)
+print(fg_stream_query.status)
 time.sleep(60) 
 
 while fg_stream_query.status['isDataAvailable']:
     print(fg_stream_query.status)
-    time.sleep(10) 
+    time.sleep(60)
 
 print("Data processing completed.")
 fg_stream_query.stop()
 spark.stop()
 
-print("Populating offline FG.")
-jb = project.get_jobs_api()
-job = jb.get_job(prefix + "events_1_offline_fg_materialization")
-execution = job.run()
+

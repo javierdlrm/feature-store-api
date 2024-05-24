@@ -20,6 +20,8 @@ from hopsworks.engine import decision_engine_model
 
 logging.basicConfig(level=logging.INFO)
 
+BATCH_SIZE = 2048
+
 def df_to_ds(df, pad_length=10):
     features = {
         col: tf.convert_to_tensor(df[col])
@@ -59,10 +61,14 @@ def login_to_project(args):
 
 def load_data(fs, prefix, config):
     events_fg = fs.get_feature_group(name=prefix + "events")
-    events_df = events_fg.read(dataframe_type="pandas")
-    events_df["event_timestamp"] = (
-        events_df["event_timestamp"].astype(np.int64) // 10**9
-    )
+    try:
+        events_df = events_fg.read(dataframe_type="pandas")
+        events_df["event_timestamp"] = (
+            events_df["event_timestamp"].astype(np.int64) // 10**9
+        )
+    except: #TODO its a bad practice
+        events_df = pd.DataFrame()
+        
 
     items_fg = fs.get_feature_group(
         name=prefix + config["product_list"]["feature_view_name"]
@@ -81,11 +87,10 @@ def load_data(fs, prefix, config):
 
 
 def compute_fg_size(events_fg):
-    try:
-        fg_stat = events_fg.statistics
-    except Exception as e:
-        logging.info(f"Couldn't retrieve events FG statistics. Quitting. Error: {e}")
+    fg_stat = events_fg.statistics
+    if not fg_stat:
         # no data available yet - no events received
+        logging.info(f"Couldn't retrieve events FG statistics. Quitting.")
         sys.exit()
 
     fg_size = next(
@@ -329,12 +334,7 @@ def create_deployment(mr, project, new_version, prefix, model_name, deployment_n
     )
 
 
-def update_opensearch_index(items_df, opensearch_api, config, candidate_model, prefix):
-    client = OpenSearch(**opensearch_api.get_default_py_config())
-    
-    index_name = opensearch_api.get_project_index(
-        config["product_list"]["feature_view_name"]
-    )
+def update_opensearch_index(items_fg, config, candidate_model):
 
     items_ds = tf.data.Dataset.from_tensor_slices(
         {col: items_df[col] for col in items_df}
@@ -345,28 +345,34 @@ def update_opensearch_index(items_df, opensearch_api, config, candidate_model, p
             candidate_model(x),
         )
     )
-
-    actions = []
-    for batch in item_embeddings:
-        item_id_list, embedding_list = batch
-        item_id_list = item_id_list.numpy().astype(int)
-        embedding_list = embedding_list.numpy()
-        
-        for item_id, embedding in zip(item_id_list, embedding_list):
-        
-            actions.append({"update": { "_index": index_name, "_id": int(item_id)}})
-            actions.append({'doc': {prefix + "vector": embedding.tolist()}})
-
-    print(f"Example item vectors to be bulked: {actions[:10]}")
-    client.bulk(actions)
+    all_pk_list = tf.concat([batch[0] for batch in item_embeddings], axis=0).numpy().tolist()
+    all_embeddings_list = tf.concat([batch[1] for batch in item_embeddings], axis=0).numpy().tolist()
+    
+    data_emb = pd.DataFrame({
+        config["product_list"]["primary_key"]: all_pk_list, 
+        'embeddings': all_embeddings_list,
+    })
+    items_fg.insert(data_emb)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-name", type=str, help="Name of DE project", default="none")
+    parser.add_argument("-start_time", default=None)  # to be ignored
     args = parser.parse_args()
 
     project, fs, mr, ms, prefix, config, opensearch_api = login_to_project(args)
+    
+    print("Populating offline Events FG.")
+    jb = project.get_jobs_api()
+    job = jb.get_job(prefix + "events_1_offline_fg_materialization")
+    execution = job.run()
+    while True:
+        if not execution.success:
+            sys.exit()
+        else:
+            break
+        
     events_fg, events_df, items_fg, items_df = load_data(fs, prefix, config)
 
     if config["model_configuration"]["retrain"]["type"] == "ratio_threshold":
@@ -405,7 +411,7 @@ if __name__ == "__main__":
     
     current_model = mr.get_model(prefix + "query_model")
     new_version = save_model_to_registry(mr, prefix, "candidate_model", current_model.description)
-    update_opensearch_index(items_df, opensearch_api, config, candidate_model, prefix)
+    update_opensearch_index(items_fg, config, candidate_model, prefix)
 
     # Ranking model
     train_ds = preprocess_ranking_train_df(events_df, items_df, config)
