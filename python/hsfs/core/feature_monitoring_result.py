@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
-from typing import Optional, Union
+from typing import List, Optional, Set, Union
 
 import humps
 from hsfs import util
-from hsfs.core.feature_descriptive_statistics import FeatureDescriptiveStatistics
+from hsfs.core.feature_statistics_result import FeatureStatisticsResult
 
 
 class FeatureMonitoringResult:
@@ -30,22 +30,14 @@ class FeatureMonitoringResult:
         feature_store_id: int,
         execution_id: int,
         monitoring_time: Union[int, datetime, date, str],
-        config_id: int,
-        feature_name: str,
-        difference: Optional[float] = None,
-        shift_detected: bool = False,
-        detection_statistics_id: Optional[int] = None,
-        reference_statistics_id: Optional[int] = None,
+        feature_monitoring_config_id: int,
+        shifted_feature_names: Optional[Union[Set[str], List[str]]] = None,
+        feature_statistics_results: Optional[
+            Union[List[FeatureStatisticsResult], List[dict]]
+        ] = None,
         empty_detection_window: bool = False,
-        empty_reference_window: bool = False,
-        specific_value: Optional[float] = None,
+        empty_reference_window: Optional[bool] = None,
         raised_exception: bool = False,
-        detection_statistics: Optional[
-            Union[FeatureDescriptiveStatistics, dict]
-        ] = None,
-        reference_statistics: Optional[
-            Union[FeatureDescriptiveStatistics, dict]
-        ] = None,
         id: Optional[int] = None,
         href: Optional[str] = None,
         **kwargs,
@@ -54,34 +46,40 @@ class FeatureMonitoringResult:
         self._href = href
         self._feature_store_id = feature_store_id
         self._execution_id = execution_id
-        self._config_id = config_id
-        self._feature_name = feature_name
-        self._detection_statistics_id = detection_statistics_id
-        self._reference_statistics_id = reference_statistics_id
-        self._detection_statistics = self._parse_descriptive_statistics(
-            detection_statistics
+        self._feature_monitoring_config_id = feature_monitoring_config_id
+        self._shifted_feature_names = self._parse_shifted_feature_names(
+            shifted_feature_names
         )
-        self._reference_statistics = self._parse_descriptive_statistics(
-            reference_statistics
+        self._feature_statistics_results = self._parse_feature_statistics_results(
+            feature_statistics_results
         )
         self._monitoring_time = util.convert_event_time_to_timestamp(monitoring_time)
-        self._difference = difference
-        self._shift_detected = shift_detected
         self._empty_detection_window = empty_detection_window
         self._empty_reference_window = empty_reference_window
         self._raised_exception = raised_exception
-        self._specific_value = specific_value
 
-    def _parse_descriptive_statistics(
+    def _parse_feature_statistics_results(
         self,
-        statistics: Optional[Union[FeatureDescriptiveStatistics, dict]],
-    ) -> Optional[FeatureDescriptiveStatistics]:
-        if statistics is None:
+        feature_statistics_results: Optional[
+            Union[List[FeatureStatisticsResult], List[dict]]
+        ],
+    ) -> Optional[List[FeatureStatisticsResult]]:
+        if feature_statistics_results is None:
             return None
+        fs_results = []
+        for fs_result in feature_statistics_results:
+            fs_results.append(
+                fs_result
+                if isinstance(fs_result, FeatureStatisticsResult)
+                else FeatureStatisticsResult.from_response_json(fs_result)
+            )
+        return fs_results
+
+    def _parse_shifted_feature_names(self, shifted_feature_names) -> Optional[Set[str]]:
         return (
-            statistics
-            if isinstance(statistics, FeatureDescriptiveStatistics)
-            else FeatureDescriptiveStatistics.from_response_json(statistics)
+            set(shifted_feature_names)
+            if isinstance(shifted_feature_names, list)
+            else shifted_feature_names
         )
 
     @classmethod
@@ -98,26 +96,19 @@ class FeatureMonitoringResult:
         the_dict = {
             "id": self._id,
             "featureStoreId": self._feature_store_id,
-            "configId": self._config_id,
+            "featureMonitoringConfigId": self._feature_monitoring_config_id,
             "executionId": self._execution_id,
             "monitoringTime": self._monitoring_time,
-            "difference": self._difference,
-            "shiftDetected": self._shift_detected,
-            "featureName": self._feature_name,
             "emptyDetectionWindow": self._empty_detection_window,
             "emptyReferenceWindow": self._empty_reference_window,
             "raisedException": self._raised_exception,
-            "specificValue": self._specific_value,
         }
-
-        if self._detection_statistics_id is not None:
-            the_dict["detectionStatisticsId"] = self._detection_statistics_id
-        if self._reference_statistics_id is not None:
-            the_dict["referenceStatisticsId"] = self._reference_statistics_id
-        if self._detection_statistics is not None:
-            the_dict["detectionStatistics"] = self._detection_statistics.to_dict()
-        if self._reference_statistics is not None:
-            the_dict["referenceStatistics"] = self._reference_statistics.to_dict()
+        if self._feature_statistics_results is not None:
+            the_dict["featureStatisticsResults"] = [
+                fs_result.to_dict() for fs_result in self._feature_statistics_results
+            ]
+        if self._shifted_feature_names:
+            the_dict["shiftedFeatureNames"] = list(self._shifted_feature_names)
 
         return the_dict
 
@@ -128,7 +119,7 @@ class FeatureMonitoringResult:
         return self.json()
 
     def __repr__(self) -> str:
-        return json.dumps(humps.decamelize(self.to_dict()), indent=2)
+        return f"FeatureMonitoringResult({self._monitoring_time!r})"
 
     @property
     def id(self) -> Optional[int]:
@@ -136,34 +127,14 @@ class FeatureMonitoringResult:
         return self._id
 
     @property
-    def config_id(self) -> int:
+    def feature_monitoring_config_id(self) -> int:
         """Id of the feature monitoring configuration containing this result."""
-        return self._config_id
+        return self._feature_monitoring_config_id
 
     @property
     def feature_store_id(self) -> int:
         """Id of the Feature Store."""
         return self._feature_store_id
-
-    @property
-    def detection_statistics_id(self) -> Optional[int]:
-        """Id of the feature descriptive statistics computed on the detection window."""
-        return self._detection_statistics_id
-
-    @property
-    def reference_statistics_id(self) -> Optional[int]:
-        """Id of the feature descriptive statistics computed on the reference window."""
-        return self._reference_statistics_id
-
-    @property
-    def detection_statistics(self) -> Optional[FeatureDescriptiveStatistics]:
-        """Feature descriptive statistics computed on the detection window."""
-        return self._detection_statistics
-
-    @property
-    def reference_statistics(self) -> Optional[FeatureDescriptiveStatistics]:
-        """Feature descriptive statistics computed on the reference window."""
-        return self._reference_statistics
 
     @property
     def execution_id(self) -> Optional[int]:
@@ -176,35 +147,19 @@ class FeatureMonitoringResult:
         return self._monitoring_time
 
     @property
-    def difference(self) -> Optional[float]:
-        """Difference between detection and reference values. It can be relative or absolute difference,
-        depending on the statistics comparison configuration provided in `relative` parameter passed to `compare_on()`
-        when enabling feature monitoring.
-        """
-        return self._difference
-
-    @property
-    def shift_detected(self) -> bool:
-        """Whether or not shift was detected in the detection window based on the computed statistics and the threshold provided in `compare_on()`
-        when enabling feature monitoring."""
-        return self._shift_detected
-
-    @property
-    def feature_name(self) -> str:
-        """Name of the feature being monitored."""
-        return self._feature_name
-
-    @property
     def empty_detection_window(self) -> bool:
         """Whether or not the detection window was empty in this feature monitoring run."""
         return self._empty_detection_window
 
     @property
-    def empty_reference_window(self) -> bool:
+    def empty_reference_window(self) -> Optional[bool]:
         """Whether or not the reference window was empty in this feature monitoring run."""
         return self._empty_reference_window
 
     @property
-    def specific_value(self) -> Optional[float]:
-        """Specific value used as reference in the statistics comparison."""
-        return self._specific_value
+    def shifted_feature_names(self) -> Optional[Set[str]]:
+        return self._shifted_feature_names
+
+    @property
+    def feature_statistics_results(self) -> Optional[List[FeatureStatisticsResult]]:
+        return self._feature_statistics_results

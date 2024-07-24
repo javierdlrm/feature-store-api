@@ -80,7 +80,7 @@
           "jobName": "fg_or_fv_name_version_fm_config_name_run_feature_monitoring",
           "name": "unit_test_config",
           "description": "I am a unit test fixture",
-          "featureMonitoringType": "STATISTICS_COMPUTATION",
+          "featureMonitoringType": "SCHEDULED_STATISTICS",
           "detectionWindowConfig": {
             "windowConfigType": "ROLLING_TIME",
             "timeOffset": "1w",
@@ -180,7 +180,7 @@
           "jobName": "fg_or_fv_name_version_fm_config_name_run_feature_monitoring",
           "name": "unit_test_config",
           "description": "I am a unit test fixture",
-          "featureMonitoringType": "STATISTICS_COMPUTATION",
+          "featureMonitoringType": "SCHEDULED_STATISTICS",
           "detectionWindowConfig": {
             "windowConfigType": "ROLLING_TIME",
             "timeOffset": "1w",
@@ -206,7 +206,7 @@
         "job_name": "test_job_name",
         "name": "unit_test_config",
         "description": "I am a unit test fixture",
-        "feature_monitoring_type": "STATISTICS_COMPUTATION",
+        "feature_monitoring_type": "SCHEDULED_STATISTICS",
         "detection_window_config": {
           "window_config_type": "INSERT",
           "time_offset": "1w",
@@ -226,7 +226,7 @@
         "name": "unit_test_config",
         "description": "I am a unit test fixture",
         "enabled": true,
-        "feature_monitoring_type": "STATISTICS_COMPUTATION",
+        "feature_monitoring_type": "SCHEDULED_STATISTICS",
         "detection_window_config": {
           "window_config_type": "ROLLING_TIME",
           "time_offset": "1w",
@@ -292,7 +292,7 @@
       "name": "test_monitoring_config",
       "description": null,
       "jobName": null,
-      "featureMonitoringType": "STATISTICS_COMPUTATION",
+      "featureMonitoringType": "SCHEDULED_STATISTICS",
       "jobSchedule": {
         "id": null,
         "startDateTime": 1,

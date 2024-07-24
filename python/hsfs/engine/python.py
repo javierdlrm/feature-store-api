@@ -139,9 +139,9 @@ class Engine:
                 sql_query,
                 dataframe_type,
                 schema,
-                arrow_flight_config=read_options.get("arrow_flight_config", {})
-                if read_options
-                else {},
+                arrow_flight_config=(
+                    read_options.get("arrow_flight_config", {}) if read_options else {}
+                ),
             )
         else:
             return self._jdbc(
@@ -1478,9 +1478,11 @@ class Engine:
         # _cast_column_to_offline_type cannot cast string type
         features[model_col_name] = pd.Series(
             [
-                FeatureViewEngine.get_hsml_model_value(hsml_model)
-                if hsml_model
-                else None
+                (
+                    FeatureViewEngine.get_hsml_model_value(hsml_model)
+                    if hsml_model
+                    else None
+                )
                 for _ in range(len(features))
             ],
             dtype=pd.StringDtype(),

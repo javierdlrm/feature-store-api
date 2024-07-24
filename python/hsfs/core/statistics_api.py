@@ -64,7 +64,7 @@ class StatisticsApi:
         computation_time: Optional[int] = None,
         start_commit_time: Optional[int] = None,
         end_commit_time: Optional[int] = None,
-        feature_names: List[str] = None,
+        feature_names: Optional[List[str]] = None,
         row_percentage: Optional[float] = None,
         before_transformation: Optional[bool] = None,
         training_dataset_version: Optional[int] = None,
@@ -247,7 +247,7 @@ class StatisticsApi:
             ]
 
     def _extract_single_stats(
-        self, stats: Union[statistics.Statistics, List[statistics.Statistics]]
+        self, stats: Optional[Union[statistics.Statistics, List[statistics.Statistics]]]
     ) -> Optional[statistics.Statistics]:
         return stats[0] if isinstance(stats, list) else stats
 

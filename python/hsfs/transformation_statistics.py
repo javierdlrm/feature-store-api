@@ -41,7 +41,7 @@ class FeatureTransformationStatistics:
     max: Optional[float] = None
     sum: Optional[float] = None
     mean: Optional[float] = None
-    stddev: Optional[float] = None
+    std_dev: Optional[float] = None
     percentiles: Optional[Mapping[str, float]] = None
     # with exact uniqueness
     distinctness: Optional[float] = None
@@ -62,7 +62,7 @@ class FeatureTransformationStatistics:
         max: Optional[float] = None,
         sum: Optional[float] = None,
         mean: Optional[float] = None,
-        stddev: Optional[float] = None,
+        std_dev: Optional[float] = None,
         percentiles: Optional[Mapping[str, float]] = None,
         distinctness: Optional[float] = None,
         entropy: Optional[float] = None,
@@ -81,7 +81,7 @@ class FeatureTransformationStatistics:
         self.max = max
         self.sum = sum
         self.mean = mean
-        self.stddev = stddev
+        self.std_dev = std_dev
         self.percentiles = percentiles
         self.distinctness = distinctness
         self.entropy = entropy

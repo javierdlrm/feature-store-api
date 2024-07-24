@@ -41,7 +41,7 @@ class TestFeatureDescriptiveStatistics:
         assert result._max == 2
         assert result._sum == 3
         assert result._mean == 5.1
-        assert result._stddev == 6.1
+        assert result._std_dev == 6.1
         assert result._percentiles == {"25%": 0.4, "50%": 0.6, "75%": 0.86}
         assert result._distinctness == 0.9
         assert result._entropy == 0.8
@@ -72,7 +72,7 @@ class TestFeatureDescriptiveStatistics:
         assert result._max == 2
         assert result._sum == 3
         assert result._mean == 5.1
-        assert result._stddev == 6.1
+        assert result._std_dev == 6.1
         assert result._percentiles == {"25%": 0.4, "50%": 0.6, "75%": 0.86}
         assert result._distinctness == 0.9
         assert result._entropy == 0.8
@@ -153,7 +153,7 @@ class TestFeatureDescriptiveStatistics:
         assert result._max is None
         assert result._sum is None
         assert result._mean is None
-        assert result._stddev is None
+        assert result._std_dev is None
         assert result._percentiles is None
         assert result._distinctness is None
         assert result._entropy is None
@@ -184,7 +184,7 @@ class TestFeatureDescriptiveStatistics:
         assert result._max is None
         assert result._sum is None
         assert result._mean is None
-        assert result._stddev is None
+        assert result._std_dev is None
         assert result._percentiles is None
         assert result._distinctness is None
         assert result._entropy is None
@@ -216,7 +216,7 @@ class TestFeatureDescriptiveStatistics:
         assert result._max == 2
         assert result._sum == 3
         assert result._mean == 5.1
-        assert result._stddev == 6.1
+        assert result._std_dev == 6.1
         assert result._percentiles == {"25%": 0.4, "50%": 0.6, "75%": 0.86}
         assert result._distinctness == 0.9
         assert result._entropy == 0.8
@@ -248,7 +248,7 @@ class TestFeatureDescriptiveStatistics:
         assert result._max == 2
         assert result._sum == 3
         assert result._mean == 5.1
-        assert result._stddev == 6.1
+        assert result._std_dev == 6.1
         # assert result._percentiles == {"25%": 0.4, "50%": 0.6, "75%": 0.86}  # TODO: Parse deequ approxPercentiles
         assert result._distinctness == 0.9
         assert result._entropy == 0.8
@@ -277,7 +277,7 @@ class TestFeatureDescriptiveStatistics:
         assert result._max == 2
         assert result._sum == 3
         assert result._mean == 5.1
-        assert result._stddev == 6.1
+        assert result._std_dev == 6.1
         # assert result._percentiles == {"25%": 0.4, "50%": 0.6, "75%": 0.86}  # TODO: Parse deequ approxPercentiles
         assert result._distinctness == 0.9
         assert result._entropy == 0.8

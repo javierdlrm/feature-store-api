@@ -143,7 +143,7 @@ class TestFeatureMonitoringResultEngine:
         )
 
         # Act
-        result_engine.save_feature_monitoring_result(result)
+        result_engine.save(result)
 
         # Assert
         assert result_create_api_mock.call_args[0][0] == result
@@ -167,7 +167,7 @@ class TestFeatureMonitoringResultEngine:
         )
 
         # Act
-        result_engine.save_feature_monitoring_result(result)
+        result_engine.save(result)
 
         # Assert
         assert result_create_api_mock.call_args[0][0] == result
@@ -335,7 +335,7 @@ class TestFeatureMonitoringResultEngine:
         )
         job_api_get_mock = mocker.patch(GET_JOB_API)
         result_engine_save_mock = mocker.patch(
-            "hsfs.core.feature_monitoring_result_engine.FeatureMonitoringResultEngine.save_feature_monitoring_result",
+            "hsfs.core.feature_monitoring_result_engine.FeatureMonitoringResultEngine.save",
         )
         result_engine = feature_monitoring_result_engine.FeatureMonitoringResultEngine(
             feature_store_id=DEFAULT_FEATURE_STORE_ID,
@@ -346,7 +346,7 @@ class TestFeatureMonitoringResultEngine:
         before_time = util.convert_event_time_to_timestamp(
             datetime.now() - timedelta(seconds=1)
         )
-        result_engine.save_feature_monitoring_result_with_exception(
+        result_engine.save_with_exception(
             config_id=DEFAULT_CONFIG_ID,
             job_name=DEFAULT_JOB_NAME,
         )
@@ -668,7 +668,7 @@ class TestFeatureMonitoringResultEngine:
     ):
         # Arrange
         result_engine_save_mock = mocker.patch(
-            "hsfs.core.feature_monitoring_result_engine.FeatureMonitoringResultEngine.save_feature_monitoring_result",
+            "hsfs.core.feature_monitoring_result_engine.FeatureMonitoringResultEngine.save",
         )
         result_engine_build_mock = mocker.patch(
             "hsfs.core.feature_monitoring_result_engine.FeatureMonitoringResultEngine.build_feature_monitoring_result",

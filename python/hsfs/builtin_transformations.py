@@ -32,7 +32,7 @@ def min_max_scaler(feature: pd.Series, statistics=feature_statistics) -> pd.Seri
 
 @udf(float, drop=["feature"])
 def standard_scaler(feature: pd.Series, statistics=feature_statistics) -> pd.Series:
-    return (feature - statistics.feature.mean) / statistics.feature.stddev
+    return (feature - statistics.feature.mean) / statistics.feature.std_dev
 
 
 @udf(float, drop=["feature"])

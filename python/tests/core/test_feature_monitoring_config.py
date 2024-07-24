@@ -148,7 +148,7 @@ class TestFeatureMonitoringConfig:
         assert config.enabled is False
         assert (
             config._feature_monitoring_type
-            == FeatureMonitoringType.STATISTICS_COMPUTATION
+            == FeatureMonitoringType.SCHEDULED_STATISTICS
         )
         assert (
             config.job_name
@@ -191,7 +191,7 @@ class TestFeatureMonitoringConfig:
         assert config.enabled is False
         assert (
             config._feature_monitoring_type
-            == FeatureMonitoringType.STATISTICS_COMPUTATION
+            == FeatureMonitoringType.SCHEDULED_STATISTICS
         )
         assert (
             config.job_name
