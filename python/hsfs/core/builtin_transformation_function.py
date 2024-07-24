@@ -58,7 +58,7 @@ class BuiltInTransformationFunction:
                 if stats.feature_type not in ["Integral", "Fractional", "Decimal"]:
                     raise ValueError("Can't compute standard_scaler for this type")
                 mean = stats.mean
-                std_dev = stats.stddev
+                std_dev = stats.std_dev
 
         if mean is None or std_dev is None:
             raise FeatureStoreException(

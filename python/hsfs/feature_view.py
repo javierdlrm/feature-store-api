@@ -449,9 +449,11 @@ class FeatureView:
             self,
             start_time,
             end_time,
-            training_dataset_version=self._batch_scoring_server.training_dataset_version
-            if self._batch_scoring_server
-            else None,
+            training_dataset_version=(
+                self._batch_scoring_server.training_dataset_version
+                if self._batch_scoring_server
+                else None
+            ),
         )
 
     def get_feature_vector(
@@ -3193,7 +3195,7 @@ class FeatureView:
                 "Only Feature Group registered with Hopsworks can fetch feature monitoring configurations."
             )
 
-        return self._feature_monitoring_config_engine.get_feature_monitoring_configs(
+        return self._feature_monitoring_config_engine.get(
             name=name,
             feature_name=feature_name,
             config_id=config_id,
@@ -3252,7 +3254,7 @@ class FeatureView:
                 "Only Feature View registered with Hopsworks can fetch feature monitoring history."
             )
 
-        return self._feature_monitoring_result_engine.get_feature_monitoring_results(
+        return self._feature_monitoring_result_engine.get(
             config_name=config_name,
             config_id=config_id,
             start_time=start_time,
@@ -3260,24 +3262,24 @@ class FeatureView:
             with_statistics=with_statistics,
         )
 
-    def create_statistics_monitoring(
+    def create_scheduled_statistics(
         self,
         name: str,
-        feature_name: Optional[str] = None,
+        feature_names: Optional[str, List[str]] = None,
         description: Optional[str] = None,
         start_date_time: Optional[Union[int, str, datetime, date, pd.Timestamp]] = None,
         end_date_time: Optional[Union[int, str, datetime, date, pd.Timestamp]] = None,
         cron_expression: Optional[str] = "0 0 12 ? * * *",
     ) -> "fmc.FeatureMonitoringConfig":
-        """Run a job to compute statistics on snapshot of feature data on a schedule.
-        !!! experimental
-            Public API is subject to change, this feature is not suitable for production use-cases.
+        """Create a job to compute statistics on snapshot of feature data on a schedule.
+
         !!! example
             ```python3
             # fetch feature view
             fv = fs.get_feature_view(name="my_feature_view", version=1)
+
             # enable statistics monitoring
-            my_config = fv._create_statistics_monitoring(
+            my_config = fv.create_scheduled_statistics(
                 name="my_config",
                 start_date_time="2021-01-01 00:00:00",
                 description="my description",
@@ -3291,7 +3293,7 @@ class FeatureView:
         # Arguments
             name: Name of the feature monitoring configuration.
                 name must be unique for all configurations attached to the feature view.
-            feature_name: Name of the feature to monitor. If not specified, statistics
+            feature_names: Names of the features to monitor. If not specified, statistics
                 will be computed for all features.
             description: Description of the feature monitoring configuration.
             start_date_time: Start date and time from which to start computing statistics.
@@ -3307,12 +3309,18 @@ class FeatureView:
         """
         if not self._id:
             raise FeatureStoreException(
-                "Only Feature View registered with Hopsworks can enable scheduled statistics monitoring."
+                "Only Feature View registered with Hopsworks can enable scheduled statistics."
             )
+
+        if feature_names is None:
+            # choose all features if none is selected
+            feature_names = [feat.name for feat in self._features]
+        elif not isinstance(feature_names, list):
+            feature_names = [feature_names]
 
         return self._feature_monitoring_config_engine._build_default_statistics_monitoring_config(
             name=name,
-            feature_name=feature_name,
+            feature_names=feature_names,
             description=description,
             start_date_time=start_date_time,
             valid_feature_names=[feat.name for feat in self._features],
@@ -3323,19 +3331,18 @@ class FeatureView:
     def create_feature_monitoring(
         self,
         name: str,
-        feature_name: str,
         description: Optional[str] = None,
         start_date_time: Optional[Union[int, str, datetime, date, pd.Timestamp]] = None,
         end_date_time: Optional[Union[int, str, datetime, date, pd.Timestamp]] = None,
         cron_expression: Optional[str] = "0 0 12 ? * * *",
     ) -> "fmc.FeatureMonitoringConfig":
         """Enable feature monitoring to compare statistics on snapshots of feature data over time.
-        !!! experimental
-            Public API is subject to change, this feature is not suitable for production use-cases.
+
         !!! example
             ```python3
             # fetch feature view
             fg = fs.get_feature_view(name="my_feature_view", version=1)
+
             # enable feature monitoring
             my_config = fg.create_feature_monitoring(
                 name="my_monitoring_config",
@@ -3350,6 +3357,7 @@ class FeatureView:
                 # compare to a given value
                 specific_value=0.5,
             ).compare_on(
+                feature_name="my_feature",
                 metric="mean",
                 threshold=0.5,
             ).save()
@@ -3357,7 +3365,6 @@ class FeatureView:
         # Arguments
             name: Name of the feature monitoring configuration.
                 name must be unique for all configurations attached to the feature group.
-            feature_name: Name of the feature to monitor.
             description: Description of the feature monitoring configuration.
             start_date_time: Start date and time from which to start computing statistics.
             end_date_time: End date and time at which to stop computing statistics.
@@ -3377,7 +3384,6 @@ class FeatureView:
 
         return self._feature_monitoring_config_engine._build_default_feature_monitoring_config(
             name=name,
-            feature_name=feature_name,
             description=description,
             start_date_time=start_date_time,
             valid_feature_names=[feat.name for feat in self._features],

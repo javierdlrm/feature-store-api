@@ -298,7 +298,7 @@ class TestPythonSparkTransformationFunctions:
         td = self._create_training_dataset(tf_fun, "DOUBLE", "standard_scaler")
 
         mean = statistics.mean([1, 2])
-        stddev = statistics.pstdev([1, 2])
+        std_dev = statistics.pstdev([1, 2])
         td.transformation_functions["col_0"] = (
             TransformationFunctionEngine.populate_builtin_fn_arguments(
                 "col_0",
@@ -308,7 +308,7 @@ class TestPythonSparkTransformationFunctions:
                         feature_name="col_0",
                         feature_type="Integral",
                         mean=mean,
-                        stddev=stddev,
+                        std_dev=std_dev,
                     )
                 ],
             )

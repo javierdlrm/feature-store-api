@@ -45,23 +45,8 @@ class MonitoringWindowConfigEngine:
         time_offset: Optional[str] = None,
         window_length: Optional[str] = None,
         training_dataset_version: Optional[int] = None,
-        specific_value: Optional[Union[int, float]] = None,
         row_percentage: Optional[float] = None,
     ) -> "mwc.WindowConfigType":
-        if isinstance(specific_value, int) or isinstance(specific_value, float):
-            if any(
-                [
-                    time_offset is not None,
-                    window_length is not None,
-                    training_dataset_version is not None,
-                    row_percentage is not None,
-                ]
-            ):
-                raise ValueError(
-                    "If specific_value is set, no other parameter can be set."
-                )
-            return mwc.WindowConfigType.SPECIFIC_VALUE
-
         if isinstance(training_dataset_version, int):
             if any(
                 [
@@ -71,7 +56,7 @@ class MonitoringWindowConfigEngine:
                 ]
             ):
                 raise ValueError(
-                    "If training_dataset_version is set, no other parameter can be set."
+                    "If training_dataset_version is set, no other window parameters can be set."
                 )
             return mwc.WindowConfigType.TRAINING_DATASET
 
@@ -121,7 +106,6 @@ class MonitoringWindowConfigEngine:
             time_offset=time_offset,
             window_length=window_length,
             training_dataset_version=training_dataset_version,
-            specific_value=specific_value,
             row_percentage=row_percentage,
         )
 
@@ -130,7 +114,7 @@ class MonitoringWindowConfigEngine:
             and window_config_type != detected_window_config_type
         ):
             raise ValueError(
-                "The window_config_type does not match the parameters set."
+                "The window_config_type parameter does not match the window parameters set."
             )
 
         if (
@@ -232,7 +216,7 @@ class MonitoringWindowConfigEngine:
         self,
         entity: Union["feature_group.FeatureGroup", "feature_view.FeatureView"],
         monitoring_window_config: "mwc.MonitoringWindowConfig",
-        feature_name: Optional[str] = None,
+        feature_names: List[str],
     ) -> List[FeatureDescriptiveStatistics]:
         """Fetch the entity data based on monitoring window configuration and compute statistics.
 
@@ -251,6 +235,9 @@ class MonitoringWindowConfigEngine:
         ) = self.get_window_start_end_times(
             monitoring_window_config=monitoring_window_config,
         )
+
+        registered_stats = None  # no stats by default value
+
         if (
             monitoring_window_config.window_config_type
             == mwc.WindowConfigType.TRAINING_DATASET
@@ -260,39 +247,68 @@ class MonitoringWindowConfigEngine:
                 entity,
                 training_dataset_version=monitoring_window_config.training_dataset_version,
             )
-            before_transformation = (
-                feature_name is not None
-                and td_meta.transformation_functions is not None
-                and feature_name in td_meta.transformation_functions.keys()
-            )
-            registered_stats = entity.get_training_dataset_statistics(
-                training_dataset_version=monitoring_window_config.training_dataset_version,
-                before_transformation=before_transformation,
-                feature_names=[feature_name] if feature_name is not None else None,
-            )
-            if (
-                registered_stats.feature_descriptive_statistics is None
-                and registered_stats.split_statistics is not None
-            ):
-                # if td splits, we use the train set statistics
-                for split in registered_stats.split_statistics:
-                    if split.name == TrainingDatasetSplit.TRAIN:
-                        registered_stats = split
+
+            # split untransformed and transformed features
+            after_transf_features, before_transf_features = [], []
+            if td_meta.transformation_functions is None:
+                after_transf_features = feature_names
+            else:
+                for feat_name in feature_names:
+                    if feat_name in td_meta.transformation_functions.keys():
+                        before_transf_features.append(feat_name)
+                    else:
+                        after_transf_features.append(feat_name)
+
+            if after_transf_features:
+                registered_stats = entity.get_training_dataset_statistics(
+                    training_dataset_version=monitoring_window_config.training_dataset_version,
+                    before_transformation=False,
+                    feature_names=after_transf_features,
+                )
+
+                if (
+                    registered_stats.feature_descriptive_statistics is None
+                    and registered_stats.split_statistics is not None
+                ):
+                    # if td splits, we use the train set statistics
+                    for split in registered_stats.split_statistics:
+                        if split.name == TrainingDatasetSplit.TRAIN:
+                            registered_stats = split
+                assert (
+                    registered_stats.feature_descriptive_statistics
+                ), "Registered statistics must have feature descriptive statistics"
+
+            if before_transf_features:
+                before_transf_stats = entity.get_training_dataset_statistics(
+                    training_dataset_version=monitoring_window_config.training_dataset_version,
+                    before_transformation=True,
+                    feature_names=before_transf_features,
+                )
+                assert before_transf_stats.feature_descriptive_statistics, "Registered statistics before transformations must have feature descriptive statistics"
+
+                if registered_stats is None:
+                    registered_stats = before_transf_stats
+                else:
+                    registered_stats.feature_descriptive_statistics.extend(
+                        before_transf_stats.feature_descriptive_statistics
+                    )
         else:
             # Check if statistics already exists
             registered_stats = self._statistics_engine.get_by_time_window(
                 metadata_instance=entity,
                 start_commit_time=start_time,
                 end_commit_time=end_time,
-                feature_names=[feature_name] if feature_name is not None else None,
+                feature_names=feature_names,
                 row_percentage=monitoring_window_config.row_percentage,
             )
 
         if registered_stats is None:  # if statistics don't exist
+            # TODO: What happens if window is TRAINING_DATASET and the TD statistics were not computed???
+
             # Fetch the actual data for which to compute statistics based on row_percentage and time window
             entity_feature_df = self.fetch_entity_data_in_monitoring_window(
                 entity=entity,
-                feature_name=feature_name,
+                feature_names=feature_names,
                 start_time=start_time,
                 end_time=end_time,
                 row_percentage=monitoring_window_config.row_percentage,
@@ -306,7 +322,7 @@ class MonitoringWindowConfigEngine:
                     window_start_commit_time=start_time,
                     window_end_commit_time=end_time,
                     row_percentage=monitoring_window_config.row_percentage,
-                    feature_name=feature_name,
+                    feature_name=feature_names,
                 )
             )
 
@@ -319,10 +335,10 @@ class MonitoringWindowConfigEngine:
     def fetch_entity_data_in_monitoring_window(
         self,
         entity: Union["feature_group.FeatureGroup", "feature_view.FeatureView"],
+        feature_names: List[str],
         start_time: Optional[int],
         end_time: Optional[int],
         row_percentage: float,
-        feature_name: Optional[str] = None,
     ) -> TypeVar("pyspark.sql.DataFrame"):
         """Fetch the entity data based on time window and row percentage.
 
@@ -340,14 +356,14 @@ class MonitoringWindowConfigEngine:
             if isinstance(entity, feature_group.FeatureGroup):
                 entity_df = self.fetch_feature_group_data(
                     entity=entity,
-                    feature_name=feature_name,
+                    feature_names=feature_names,
                     start_time=start_time,
                     end_time=end_time,
                 )
             else:
                 entity_df = self.fetch_feature_view_data(
                     entity=entity,
-                    feature_name=feature_name,
+                    feature_names=feature_names,
                     start_time=start_time,
                     end_time=end_time,
                 )
@@ -365,7 +381,7 @@ class MonitoringWindowConfigEngine:
                 # because the computation of statistics will be discarded in statistics_engine (len(df.head()) == 0)
                 import pandas as pd
 
-                return pd.DataFrame(columns=[feat.name for feat in entity.schema])
+                return pd.DataFrame(columns=feature_names)
             else:
                 raise e
 
@@ -374,7 +390,7 @@ class MonitoringWindowConfigEngine:
     def fetch_feature_view_data(
         self,
         entity: "feature_view.FeatureView",
-        feature_name: Optional[str] = None,
+        feature_names: Optional[List[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
     ) -> TypeVar("pyspark.sql.DataFrame"):
@@ -395,15 +411,15 @@ class MonitoringWindowConfigEngine:
             exclude_until=start_time, wallclock_time=end_time
         ).read()
 
-        if feature_name:
-            entity_df = entity_df.select(feature_name)
+        if feature_names:
+            entity_df = entity_df.select(feature_names)
 
         return entity_df
 
     def fetch_feature_group_data(
         self,
         entity: "feature_group.FeatureGroup",
-        feature_name: Optional[str] = None,
+        feature_names: Optional[List[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
     ) -> TypeVar("pyspark.sql.Dataframe"):
@@ -415,8 +431,8 @@ class MonitoringWindowConfigEngine:
             start_time: int: Window start commit time.
             end_time: int: Window end commit time.
         """
-        if feature_name:
-            pre_df = entity.select(features=[feature_name])
+        if feature_names:
+            pre_df = entity.select(features=feature_names)
         else:
             pre_df = entity
 

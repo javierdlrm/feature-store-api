@@ -33,7 +33,7 @@ class FeatureDescriptiveStatistics:
         "max",
         "sum",
         "mean",
-        "stddev",
+        "std_dev",
         "distinctness",
         "entropy",
         "uniqueness",
@@ -55,7 +55,7 @@ class FeatureDescriptiveStatistics:
         max: Optional[float] = None,
         sum: Optional[float] = None,
         mean: Optional[float] = None,
-        stddev: Optional[float] = None,
+        std_dev: Optional[float] = None,
         percentiles: Optional[Mapping[str, float]] = None,
         # with exact uniqueness
         distinctness: Optional[float] = None,
@@ -78,7 +78,7 @@ class FeatureDescriptiveStatistics:
         self._max = max
         self._sum = sum
         self._mean = mean
-        self._stddev = stddev
+        self._std_dev = std_dev
         self._percentiles = percentiles
         self._distinctness = distinctness
         self._entropy = entropy
@@ -156,7 +156,7 @@ class FeatureDescriptiveStatistics:
         if "mean" in json_dict:
             stats_dict["mean"] = json_dict["mean"]
         if "stdDev" in json_dict:
-            stats_dict["stddev"] = json_dict["stdDev"]
+            stats_dict["std_dev"] = json_dict["stdDev"]
         if "approxPercentiles" in json_dict:
             stats_dict["percentiles"] = json_dict["approxPercentiles"]
 
@@ -185,7 +185,7 @@ class FeatureDescriptiveStatistics:
             "max": self._max,
             "sum": self._sum,
             "mean": self._mean,
-            "stddev": self._stddev,
+            "stdDev": self._std_dev,
             "completeness": self._completeness,
             "numNonNullValues": self._num_non_null_values,
             "numNullValues": self._num_null_values,
@@ -207,7 +207,7 @@ class FeatureDescriptiveStatistics:
         return self.json()
 
     def __repr__(self) -> str:
-        return json.dumps(humps.decamelize(self.to_dict()), indent=2)
+        return f"FeatureDescriptiveStatistics({self._feature_name!r})"
 
     @property
     def id(self) -> Optional[int]:
@@ -269,9 +269,9 @@ class FeatureDescriptiveStatistics:
         return self._mean
 
     @property
-    def stddev(self) -> Optional[float]:
+    def std_dev(self) -> Optional[float]:
         """Standard deviation of the feature values."""
-        return self._stddev
+        return self._std_dev
 
     @property
     def percentiles(self) -> Optional[Mapping[str, float]]:

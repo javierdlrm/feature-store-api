@@ -28,7 +28,6 @@ class WindowConfigType(str, Enum):
     ALL_TIME = "ALL_TIME"
     ROLLING_TIME = "ROLLING_TIME"
     TRAINING_DATASET = "TRAINING_DATASET"
-    SPECIFIC_VALUE = "SPECIFIC_VALUE"
 
     @classmethod
     def list_str(cls) -> List[str]:
@@ -69,11 +68,10 @@ class MonitoringWindowConfig:
         id: Optional[int] = None,
         window_config_type: Optional[
             Union[str, WindowConfigType]
-        ] = WindowConfigType.SPECIFIC_VALUE,
+        ] = WindowConfigType.ALL_TIME,
         time_offset: Optional[str] = None,
         window_length: Optional[str] = None,
         training_dataset_version: Optional[int] = None,
-        specific_value: Optional[float] = None,
         row_percentage: Optional[float] = None,
         **kwargs,
     ):
@@ -96,9 +94,6 @@ class MonitoringWindowConfig:
             )
 
             # Only available for reference window
-            ## Specific value
-            monitoring_window_config = MonitoringWindowConfig(specific_value=0.5)
-
             ## Training dataset
             monitoring_window_config = MonitoringWindowConfig(
                 training_dataset_version=my_training_dataset.version
@@ -110,7 +105,7 @@ class MonitoringWindowConfig:
                 The id of the monitoring window config.
             window_config_type: str, optional
                 The type of the monitoring window config. One of ROLLING_TIME,
-                TRAINING_DATASET, SPECIFIC_VALUE.
+                TRAINING_DATASET.
             time_offset: str, optional
                 The time offset of the monitoring window config. Only used for
                 INSERT and SNAPSHOT window config types.
@@ -120,16 +115,13 @@ class MonitoringWindowConfig:
             training_dataset_version: int, optional
                 The version of the training dataset to use as reference. Only used for
                 TRAINING_DATASET window config type.
-            specific_value: float, optional
-                The specific value to use as reference. Only used for SPECIFIC_VALUE
-                window config type.
             row_percentage: float, optional
                 The fraction of rows to use when computing statistics [0, 1.0]. Only used
                 for ROLLING_TIME and ALL_TIME window config types.
 
         # Raises
             AttributeError: If window_config_type is not one of INSERT, SNAPSHOT,
-                BATCH, TRAINING_DATASET, SPECIFIC_VALUE.
+                BATCH, TRAINING_DATASET.
         """
         self._id = id
         self._window_config_type = None
@@ -137,13 +129,11 @@ class MonitoringWindowConfig:
         self._time_offset = time_offset
         self._window_length = window_length
         self._training_dataset_version = training_dataset_version
-        self._specific_value = specific_value
 
         if self.window_config_type in [
-            WindowConfigType.SPECIFIC_VALUE,
             WindowConfigType.TRAINING_DATASET,
         ]:
-            self._row_percentage = None
+            self.row_percentage = 1.0  # td stats are computed on the whole td
         else:
             self.row_percentage = row_percentage
 
@@ -169,8 +159,6 @@ class MonitoringWindowConfig:
             the_dict["timeOffset"] = self._time_offset
             the_dict["windowLength"] = self._window_length
             the_dict["rowPercentage"] = self.row_percentage
-        elif self._window_config_type == WindowConfigType.SPECIFIC_VALUE:
-            the_dict["specificValue"] = self._specific_value
         elif self._window_config_type == WindowConfigType.TRAINING_DATASET:
             the_dict["trainingDatasetVersion"] = self._training_dataset_version
 
@@ -192,7 +180,7 @@ class MonitoringWindowConfig:
 
     @property
     def window_config_type(self) -> WindowConfigType:
-        """Type of the window. It can be one of `ALL_TIME`, `ROLLING_TIME`, `TRAINING_DATASET` or `SPECIFIC_VALUE`."""
+        """Type of the window. It can be one of `ALL_TIME`, `ROLLING_TIME`, `TRAINING_DATASET`."""
         return self._window_config_type
 
     @window_config_type.setter
@@ -259,32 +247,17 @@ class MonitoringWindowConfig:
         self._training_dataset_version = training_dataset_version
 
     @property
-    def specific_value(self) -> Optional[float]:
-        """The specific value to use as reference. Only used for windows of type `SPECIFIC_VALUE`."""
-        return self._specific_value
-
-    @specific_value.setter
-    def specific_value(self, specific_value: Optional[float]):
-        if (
-            self._window_config_type != WindowConfigType.SPECIFIC_VALUE
-            and specific_value is not None
-        ):
-            raise AttributeError(
-                "Specific value can only be set for if window_config_type is SPECIFIC_VALUE."
-            )
-        self._specific_value = specific_value
-
-    @property
-    def row_percentage(self) -> Optional[float]:
+    def row_percentage(self) -> float:
         """The percentage of rows to fetch and compute the statistics on. Only used for windows of type `ROLLING_TIME` and `ALL_TIME`."""
         return self._row_percentage
 
     @row_percentage.setter
-    def row_percentage(self, row_percentage: Optional[float]):
-        if self.window_config_type in [
-            WindowConfigType.SPECIFIC_VALUE,
-            WindowConfigType.TRAINING_DATASET,
-        ]:
+    def row_percentage(self, row_percentage: Optional[Union[int, float]]):
+        if (
+            self.window_config_type == WindowConfigType.TRAINING_DATASET
+            and row_percentage is not None
+            and row_percentage != 1.0
+        ):
             raise AttributeError(
                 "Row percentage can only be set for ROLLING_TIME and ALL_TIME"
                 " window config types."
@@ -296,6 +269,10 @@ class MonitoringWindowConfig:
                 raise ValueError("Row percentage must be a float between 0 and 1.")
             self._row_percentage = row_percentage
         elif row_percentage is None:
-            self._row_percentage = self.DEFAULT_ROW_PERCENTAGE
+            self._row_percentage = (
+                1.0
+                if self.window_config_type == WindowConfigType.TRAINING_DATASET
+                else self.DEFAULT_ROW_PERCENTAGE
+            )
         else:
             raise TypeError("Row percentage must be a float between 0 and 1.")

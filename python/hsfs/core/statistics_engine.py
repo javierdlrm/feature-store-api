@@ -329,7 +329,7 @@ class StatisticsEngine:
         end_commit_time: Optional[Union[str, int, datetime, date]] = None,
         feature_names: Optional[List[str]] = None,
         row_percentage: Optional[float] = None,
-    ) -> Union[statistics.Statistics, List[statistics.Statistics], None]:
+    ) -> Optional[statistics.Statistics]:
         """Get the statistics of an entity based on a commit time window.
         Args:
             metadata_instance: Union[FeatureGroup]: Metadata of the entity containing the data.

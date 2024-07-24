@@ -31,7 +31,9 @@ from hsfs.core import (
 )
 from hsfs.core import monitoring_window_config as mwc
 from hsfs.core.feature_monitoring_result import FeatureMonitoringResult
+from hsfs.core.feature_statistics_config import FeatureStatisticsConfig
 from hsfs.core.job_schedule import JobSchedule
+from hsfs.core.statistics_comparison_config import StatisticsComparisonConfig
 
 
 MAX_LENGTH_NAME = 63
@@ -39,7 +41,7 @@ MAX_LENGTH_DESCRIPTION = 2000
 
 
 class FeatureMonitoringType(str, Enum):
-    STATISTICS_COMPUTATION = "STATISTICS_COMPUTATION"  # only stats computation
+    SCHEDULED_STATISTICS = "SCHEDULED_STATISTICS"  # stats computation on a schedule
     STATISTICS_COMPARISON = "STATISTICS_COMPARISON"  # stats computation and comparison
     PROBABILITY_DENSITY_FUNCTION = "PROBABILITY_DENSITY_FUNCTION"  # data distributions
 
@@ -78,11 +80,11 @@ class FeatureMonitoringConfig:
     def __init__(
         self,
         feature_store_id: int,
+        feature_monitoring_type: Union[FeatureMonitoringType, str],
         name: str,
-        feature_name: Optional[str] = None,
-        feature_monitoring_type: Union[
-            FeatureMonitoringType, str
-        ] = FeatureMonitoringType.STATISTICS_COMPUTATION,
+        feature_statistics_configs: Union[
+            List[FeatureStatisticsConfig], List[Dict[str, Any]]
+        ],
         job_name: Optional[str] = None,
         detection_window_config: Optional[
             Union[mwc.MonitoringWindowConfig, Dict[str, Any]]
@@ -90,13 +92,13 @@ class FeatureMonitoringConfig:
         reference_window_config: Optional[
             Union[mwc.MonitoringWindowConfig, Dict[str, Any]]
         ] = None,
-        statistics_comparison_config: Optional[Dict[str, Any]] = None,
         job_schedule: Optional[Union[Dict[str, Any], JobSchedule]] = None,
         description: Optional[str] = None,
         id: Optional[int] = None,
         feature_group_id: Optional[int] = None,
         feature_view_name: Optional[str] = None,
         feature_view_version: Optional[int] = None,
+        valid_feature_names: Optional[List[str]] = None,  # for validation purposes only
         href: Optional[str] = None,
         **kwargs,
     ):
@@ -104,13 +106,16 @@ class FeatureMonitoringConfig:
         self._id = id
         self._href = href
         self.description = description
-        self._feature_name = feature_name
         self._feature_store_id = feature_store_id
         self._feature_group_id = feature_group_id
         self._feature_view_name = feature_view_name
         self._feature_view_version = feature_view_version
         self._job_name = job_name
-        self._feature_monitoring_type = FeatureMonitoringType(feature_monitoring_type)
+        self._feature_monitoring_type = (
+            feature_monitoring_type
+            if isinstance(feature_monitoring_type, FeatureMonitoringType)
+            else FeatureMonitoringType(feature_monitoring_type)
+        )
 
         self._feature_monitoring_config_engine = (
             feature_monitoring_config_engine.FeatureMonitoringConfigEngine(
@@ -135,8 +140,26 @@ class FeatureMonitoringConfig:
 
         self.detection_window_config = detection_window_config
         self.reference_window_config = reference_window_config
-        self.statistics_comparison_config = statistics_comparison_config
+        self.feature_statistics_configs = self._parse_feature_statistics_configs(
+            feature_statistics_configs
+        )
         self.job_schedule = job_schedule
+        self._valid_feature_names = valid_feature_names
+
+    def _parse_feature_statistics_configs(
+        self,
+        feature_statistics_configs: Union[
+            List[FeatureStatisticsConfig], List[Dict[str, Any]]
+        ],
+    ) -> List[FeatureStatisticsConfig]:
+        fs_configs = []
+        for fs_config in feature_statistics_configs:
+            fs_configs.append(
+                fs_config
+                if isinstance(fs_config, FeatureStatisticsConfig)
+                else FeatureStatisticsConfig.from_response_json(fs_config)
+            )
+        return fs_configs
 
     @classmethod
     def from_response_json(cls, json_dict):
@@ -149,43 +172,24 @@ class FeatureMonitoringConfig:
             return cls(**json_decamelized)
 
     def to_dict(self):
-        detection_window_config = (
-            self._detection_window_config.to_dict()
-            if self._detection_window_config is not None
-            else None
-        )
-        reference_window_config = (
-            self._reference_window_config.to_dict()
-            if self._reference_window_config is not None
-            else None
-        )
-        if isinstance(self._statistics_comparison_config, dict):
-            statistics_comparison_config = {
-                "id": self._statistics_comparison_config.get("id", None),
-                "threshold": self._statistics_comparison_config.get("threshold", 0.0),
-                "metric": self._statistics_comparison_config.get("metric", "MEAN"),
-                "strict": self._statistics_comparison_config.get("strict", False),
-                "relative": self._statistics_comparison_config.get("relative", False),
-            }
-        else:
-            statistics_comparison_config = None
-        if isinstance(self._job_schedule, JobSchedule):
-            job_schedule = self._job_schedule.to_dict()
-        else:
-            job_schedule = None
-
         the_dict = {
             "id": self._id,
             "featureStoreId": self._feature_store_id,
-            "featureName": self._feature_name,
             "name": self._name,
             "description": self._description,
             "jobName": self._job_name,
             "featureMonitoringType": self._feature_monitoring_type,
-            "jobSchedule": job_schedule,
-            "detectionWindowConfig": detection_window_config,
+            "detectionWindowConfig": self._detection_window_config.to_dict(),
+            "featureStatisticsConfigs": [
+                fsc.to_dict() for fsc in self._feature_statistics_configs
+            ],
         }
 
+        # job schedule
+        if isinstance(self._job_schedule, JobSchedule):
+            the_dict["jobSchedule"] = self._job_schedule.to_dict()
+
+        # entity id
         if self._feature_group_id is not None:
             the_dict["featureGroupId"] = self._feature_group_id
         elif (
@@ -195,14 +199,16 @@ class FeatureMonitoringConfig:
             the_dict["featureViewName"] = self._feature_view_name
             the_dict["featureViewVersion"] = self._feature_view_version
 
-        if (
-            self._feature_monitoring_type
-            == FeatureMonitoringType.STATISTICS_COMPUTATION
-        ):
+        if self._feature_monitoring_type == FeatureMonitoringType.SCHEDULED_STATISTICS:
             return the_dict
 
-        the_dict["referenceWindowConfig"] = reference_window_config
-        the_dict["statisticsComparisonConfig"] = statistics_comparison_config
+        reference_window_config = (
+            self._reference_window_config.to_dict()
+            if self._reference_window_config is not None
+            else None
+        )
+        if reference_window_config is not None:
+            the_dict["referenceWindowConfig"] = reference_window_config
 
         return the_dict
 
@@ -227,7 +233,7 @@ class FeatureMonitoringConfig:
             # Fetch your feature group or feature view
             fg = fs.get_feature_group(name="my_feature_group", version=1)
             # Compute statistics on a regular basis
-            fg.create_statistics_monitoring(
+            fg.create_scheduled_statistics(
                 name="regular_stats",
                 cron_expression="0 0 12 ? * * *",
             ).with_detection_window(
@@ -298,48 +304,14 @@ class FeatureMonitoringConfig:
         # Returns
             `FeatureMonitoringConfig`. The updated FeatureMonitoringConfig object.
         """
-        # Setter is using the engine class to perform input validation and build monitoring window config object.
         if self.detection_window_config is None:
-            self.detection_window_config = {
-                "window_config_type": mwc.WindowConfigType.ALL_TIME,
-                "row_percentage": 1.0,
-            }
+            self.with_detection_window()  # use default detection window
+
+        # Setter is using the engine class to perform input validation and build monitoring window config object.
         self.reference_window_config = {
             "time_offset": time_offset,
             "window_length": window_length,
             "row_percentage": row_percentage,
-        }
-
-        return self
-
-    def with_reference_value(
-        self,
-        value: Optional[Union[float, int]] = None,
-    ) -> "FeatureMonitoringConfig":
-        """Sets the reference value to compare statistics with.
-        See also `with_reference_window(...)` and `with_reference_training_dataset(...)` for other reference options.
-        !!! example
-            ```python
-            # Fetch your feature group or feature view
-            fg = fs.get_feature_group(name="my_feature_group", version=1)
-            # Setup feature monitoring and a detection window
-            my_monitoring_config = fg.create_feature_monitoring(...).with_detection_window(...)
-            # Simplest reference window is a specific value
-            my_monitoring_config.with_reference_value(
-                value=0.0,
-            ).compare_on(...).save()
-            ```
-
-        !!! warning "Provide a comparison configuration"
-            You must provide a comparison configuration via `compare_on()` before saving the feature monitoring config.
-
-        # Arguments
-            value: A float value to use as reference.
-        # Returns
-            `FeatureMonitoringConfig`. The updated FeatureMonitoringConfig object.
-        """
-        self.reference_window_config = {
-            "specific_value": value,
         }
 
         return self
@@ -371,6 +343,9 @@ class FeatureMonitoringConfig:
         # Returns
             `FeatureMonitoringConfig`. The updated FeatureMonitoringConfig object.
         """
+        if self.detection_window_config is None:
+            self.with_detection_window()  # use default detection window
+
         self.reference_window_config = {
             "training_dataset_version": training_dataset_version,
         }
@@ -379,12 +354,14 @@ class FeatureMonitoringConfig:
 
     def compare_on(
         self,
-        metric: Optional[str],
+        feature_name: str,
+        metric: str,
         threshold: Optional[float],
         strict: Optional[bool] = False,
         relative: Optional[bool] = False,
+        specific_value: Optional[Union[int, float]] = None,
     ) -> "FeatureMonitoringConfig":
-        """Sets the statistics comparison criteria for feature monitoring with a reference window.
+        """Sets the statistics comparison criteria for feature monitoring with a reference.
         !!! example
             ```python
             # Fetch your feature group or feature view
@@ -396,6 +373,7 @@ class FeatureMonitoringConfig:
             # Choose a metric and set a threshold for the difference
             # e.g compare the relative mean of detection and reference window
             my_monitoring_config.compare_on(
+                feature_name="my_feature",
                 metric="mean",
                 threshold=1.0,
                 relative=True,
@@ -406,20 +384,36 @@ class FeatureMonitoringConfig:
             Detection window and reference window/value/training_dataset must be set prior to comparison configuration.
 
         # Arguments
+            feature_name: Name of the feature to monitor.
             metric: The metric to use for comparison. Different metric are available for different feature type.
             threshold: The threshold to apply to the difference to potentially trigger an alert.
             strict: Whether to use a strict comparison (e.g. > or <) or a non-strict comparison (e.g. >= or <=).
             relative: Whether to use a relative comparison (e.g. relative mean) or an absolute comparison (e.g. absolute mean).
+            specific_value: A float value to use as reference.
         # Returns
             `FeatureMonitoringConfig`. The updated FeatureMonitoringConfig object.
         """
-        # Setter is using the engine class to perform input validation.
-        self.statistics_comparison_config = {
-            "metric": metric,
-            "threshold": threshold,
-            "strict": strict,
-            "relative": relative,
-        }
+        if self.detection_window_config is None:
+            self.with_detection_window()  # use default detection window
+
+        if self.reference_window_config is None and specific_value is None:
+            raise ValueError("Reference window is required for statistics comparisons.")
+
+        self._feature_monitoring_config_engine.validate_statistics_metric(metric)
+
+        sc_config = StatisticsComparisonConfig(
+            metric=metric,
+            threshold=threshold,
+            relative=relative,
+            strict=strict,
+            specific_value=specific_value,
+        )
+
+        fs_config = self._with_feature_statistics_config(feature_name=feature_name)
+        self._with_statistics_comparison_config(
+            feature_statistics_config=fs_config,
+            statistics_comparison_config=sc_config,
+        )
 
         return self
 
@@ -430,7 +424,7 @@ class FeatureMonitoringConfig:
             # Fetch your feature group or feature view
             fg = fs.get_feature_group(name="my_feature_group", version=1)
             # Setup feature monitoring and a detection window
-            my_monitoring_config = fg.create_statistics_monitoring(
+            my_monitoring_config = fg.create_scheduled_statistics(
                 name="my_monitoring_config",
             ).save()
             ```
@@ -440,18 +434,13 @@ class FeatureMonitoringConfig:
         registered_config = self._feature_monitoring_config_engine.save(self)
         self.detection_window_config = registered_config._detection_window_config
         self.job_schedule = registered_config._job_schedule
-
-        if (
-            self._feature_monitoring_type
-            != FeatureMonitoringType.STATISTICS_COMPUTATION
-        ):
-            self.reference_window_config = registered_config._reference_window_config
-            self.statistics_comparison_config = (
-                registered_config._statistics_comparison_config
-            )
-
+        self.feature_statistics_configs = registered_config._feature_statistics_configs
         self._job_name = registered_config._job_name
         self._id = registered_config._id
+
+        if self._feature_monitoring_type != FeatureMonitoringType.SCHEDULED_STATISTICS:
+            self.reference_window_config = registered_config._reference_window_config
+
         return self
 
     def update(self):
@@ -471,8 +460,8 @@ class FeatureMonitoringConfig:
         """
         return self._feature_monitoring_config_engine.update(self)
 
-    def run_job(self):
-        """Trigger the feature monitoring job which computes and compares statistics on the detection and reference windows.
+    def run_once(self):
+        """Trigger the feature monitoring job once which computes and compares statistics on the detection and reference windows.
         !!! example
             ```python3
             # Fetch your feature group or feature view
@@ -581,21 +570,6 @@ class FeatureMonitoringConfig:
         """
         self._update_schedule(enabled=True)
 
-    def _update_schedule(self, enabled):
-        if self._job_schedule is None:
-            raise FeatureStoreException("No scheduler found for monitoring job")
-        job_schedule = JobSchedule(
-            id=self._job_schedule.id,
-            start_date_time=self._job_schedule.start_date_time,
-            cron_expression=self._job_schedule.cron_expression,
-            end_time=self._job_schedule.end_date_time,
-            enabled=enabled,
-        )
-        self.job_schedule = self._job_api.create_or_update_schedule_job(
-            self._job_name, job_schedule.to_dict()
-        )
-        return self._job_schedule
-
     def get_history(
         self,
         start_time: Union[datetime, date, str, int, None] = None,
@@ -635,6 +609,64 @@ class FeatureMonitoringConfig:
             with_statistics=with_statistics,
         )
 
+    def get_feature_names(self) -> List[str]:
+        return [
+            fs_config.feature_name for fs_config in self._feature_statistics_configs
+        ]
+
+    def _with_feature_statistics_config(
+        self, feature_name: str
+    ) -> FeatureStatisticsConfig:
+        if self.feature_statistics_configs is not None:
+            for fsc in self.feature_statistics_configs:
+                if fsc.feature_name == feature_name:
+                    return fsc
+
+        fs_config = FeatureStatisticsConfig(
+            feature_name=feature_name,
+            statistics_comparison_configs=[],
+        )
+        if self.feature_statistics_configs is None:
+            self.feature_statistics_configs = [fs_config]
+        else:
+            self.feature_statistics_configs.append(fs_config)
+
+        return fs_config
+
+    def _with_statistics_comparison_config(
+        self,
+        feature_statistics_config: FeatureStatisticsConfig,
+        statistics_comparison_config: StatisticsComparisonConfig,
+    ) -> StatisticsComparisonConfig:
+        if feature_statistics_config.statistics_comparison_configs is None:
+            raise ValueError("Statistics comparison configurations cannot be updated")
+
+        for sc_config in feature_statistics_config.statistics_comparison_configs:
+            if sc_config == statistics_comparison_config:
+                raise ValueError(
+                    "A similar statistics comparison configuration already exists."
+                )
+
+        feature_statistics_config.statistics_comparison_configs.append(
+            statistics_comparison_config
+        )
+        return statistics_comparison_config
+
+    def _update_schedule(self, enabled):
+        if self._job_schedule is None:
+            raise FeatureStoreException("No scheduler found for monitoring job")
+        job_schedule = JobSchedule(
+            id=self._job_schedule.id,
+            start_date_time=self._job_schedule.start_date_time,
+            cron_expression=self._job_schedule.cron_expression,
+            end_time=self._job_schedule.end_date_time,
+            enabled=enabled,
+        )
+        self.job_schedule = self._job_api.create_or_update_schedule_job(
+            self._job_name, job_schedule.to_dict()
+        )
+        return self._job_schedule
+
     @property
     def id(self) -> Optional[int]:
         """Id of the feature monitoring configuration."""
@@ -659,16 +691,6 @@ class FeatureMonitoringConfig:
     def feature_view_version(self) -> Optional[int]:
         """Version of the Feature View to which this feature monitoring configuration is attached."""
         return self._feature_view_version
-
-    @property
-    def feature_name(self) -> Optional[str]:
-        """The name of the feature to monitor. If not set, all features of the
-        Feature Group or Feature View are monitored, only available for scheduled statistics.
-
-        !!! info "This property is read-only"
-
-        """
-        return self._feature_name
 
     @property
     def name(self) -> str:
@@ -726,10 +748,10 @@ class FeatureMonitoringConfig:
         self.job_schedule.enabled = enabled
 
     @property
-    def feature_monitoring_type(self) -> Optional[str]:
+    def feature_monitoring_type(self) -> FeatureMonitoringType:
         """The type of feature monitoring to perform. Used for internal validation.
         Options are:
-            - STATISTICS_COMPUTATION if no reference window (and, therefore, comparison config) is provided
+            - SCHEDULED_STATISTICS if no reference window (and, therefore, comparison config) is provided
             - STATISTICS_COMPARISON if a reference window (and, therefore, comparison config) is provided.
 
         !!! info "This property is read-only."
@@ -792,15 +814,13 @@ class FeatureMonitoringConfig:
         ] = None,
     ):
         """Sets the reference window for monitoring."""
-        # TODO: improve setter documentation
         if (
-            self._feature_monitoring_type
-            == FeatureMonitoringType.STATISTICS_COMPUTATION
+            self._feature_monitoring_type == FeatureMonitoringType.SCHEDULED_STATISTICS
             and reference_window_config is not None
         ):
             raise AttributeError(
                 "reference_window_config is only available for feature monitoring"
-                " not for scheduled statistics."
+                " not for scheduled statistics. Use `create_feature_monitoring()` instead."
             )
         if isinstance(reference_window_config, mwc.MonitoringWindowConfig):
             self._reference_window_config = reference_window_config
@@ -818,31 +838,16 @@ class FeatureMonitoringConfig:
             )
 
     @property
-    def statistics_comparison_config(
-        self,
-    ) -> Optional[Dict[str, Any]]:
-        """Configuration for the comparison of detection and reference statistics."""
-        return self._statistics_comparison_config
+    def feature_statistics_configs(self) -> List[FeatureStatisticsConfig]:
+        """Configurations for the computation (and comparison) of feature statistics"""
+        return self._feature_statistics_configs
 
-    @statistics_comparison_config.setter
-    def statistics_comparison_config(
-        self,
-        statistics_comparison_config: Optional[Dict[str, Any]] = None,
+    @feature_statistics_configs.setter
+    def feature_statistics_configs(
+        self, feature_statistics_configs: List[FeatureStatisticsConfig]
     ):
-        if (
-            self._feature_monitoring_type
-            == FeatureMonitoringType.STATISTICS_COMPUTATION
-            and statistics_comparison_config is not None
-        ):
-            raise AttributeError(
-                "statistics_comparison_config is only available for feature monitoring"
-                " not for scheduled statistics."
-            )
-        if isinstance(statistics_comparison_config, dict):
-            self._statistics_comparison_config = self._feature_monitoring_config_engine.validate_statistics_comparison_config(
-                **statistics_comparison_config
-            )
-        elif statistics_comparison_config is None:
-            self._statistics_comparison_config = statistics_comparison_config
-        else:
-            raise TypeError("statistics_comparison_config must be of type dict or None")
+        self._feature_monitoring_config_engine.validate_feature_statistics_configs(
+            feature_statistics_configs,
+            self._feature_monitoring_type == FeatureMonitoringType.SCHEDULED_STATISTICS,
+        )
+        self._feature_statistics_configs = feature_statistics_configs

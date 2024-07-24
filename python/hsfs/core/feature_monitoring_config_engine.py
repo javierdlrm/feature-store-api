@@ -17,21 +17,59 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 import pandas as pd
 from hsfs import feature_group, feature_view
 from hsfs.client.exceptions import FeatureStoreException
 from hsfs.core import feature_monitoring_config as fmc
 from hsfs.core import feature_monitoring_config_api, monitoring_window_config_engine
-from hsfs.core import monitoring_window_config as mwc
 from hsfs.core.feature_monitoring_result import FeatureMonitoringResult
 from hsfs.core.feature_monitoring_result_engine import FeatureMonitoringResultEngine
+from hsfs.core.feature_statistics_config import FeatureStatisticsConfig
 from hsfs.core.job import Job
 from hsfs.core.job_api import JobApi
+from hsfs.core.statistics_comparison_config import StatisticsComparisonConfig
+
+
+VALID_CATEGORICAL_METRICS = [
+    "completeness",
+    "num_records_non_null",
+    "num_records_null",
+    "distinctness",
+    "entropy",
+    "uniqueness",
+    "approximate_num_distinct_values",
+    "exact_num_distinct_values",
+]
+VALID_FRACTIONAL_METRICS = [
+    "completeness",
+    "num_records_non_null",
+    "num_records_null",
+    "distinctness",
+    "entropy",
+    "uniqueness",
+    "approximate_num_distinct_values",
+    "exact_num_distinct_values",
+    "mean",
+    "max",
+    "min",
+    "sum",
+    "std_dev",
+    "count",
+]
 
 
 class FeatureMonitoringConfigEngine:
+    """Logic and helper methods to deal with configs from a feature monitoring job.
+
+    Attributes:
+        feature_store_id: int. Id of the respective Feature Store.
+        feature_group_id: int. Id of the feature group, if monitoring a feature group.
+        feature_view_name: str. Name of the feature view, if monitoring a feature view.
+        feature_view_version: int. Version of the feature view, if monitoring a feature view.
+    """
+
     def __init__(
         self,
         feature_store_id: int,
@@ -79,93 +117,66 @@ class FeatureMonitoringConfigEngine:
             feature_view_version=feature_view_version,
         )
 
-        # Should we promote the variables below to static?
-        self._VALID_CATEGORICAL_METRICS = [
-            "completeness",
-            "num_records_non_null",
-            "num_records_null",
-            "distinctness",
-            "entropy",
-            "uniqueness",
-            "approximate_num_distinct_values",
-            "exact_num_distinct_values",
-        ]
-        self._VALID_FRACTIONAL_METRICS = [
-            "completeness",
-            "num_records_non_null",
-            "num_records_null",
-            "distinctness",
-            "entropy",
-            "uniqueness",
-            "approximate_num_distinct_values",
-            "exact_num_distinct_values",
-            "mean",
-            "max",
-            "min",
-            "sum",
-            "std_dev",
-            "count",
-        ]
+    # validations
+
+    def validate_feature_statistics_configs(
+        self,
+        feature_statistics_configs: Optional[List[FeatureStatisticsConfig]] = None,
+        without_stats_configs: bool = False,
+        valid_feature_names: Optional[List[str]] = None,
+    ):
+        if feature_statistics_configs is None:
+            return None
+        if not isinstance(feature_statistics_configs, list):
+            raise TypeError(
+                "feature_statistics_configs must be a list of dicts or None"
+            )
+        for fs_config in feature_statistics_configs:
+            if (
+                without_stats_configs
+                and fs_config.statistics_comparison_configs is not None
+            ):
+                raise AttributeError(
+                    "statistics_comparison_config is only available for feature monitoring"
+                    " not for scheduled statistics."
+                )
+            self.validate_feature_statistics_config(
+                feature_statistics_config=fs_config,
+                valid_feature_names=valid_feature_names,
+            )
+
+    def validate_feature_statistics_config(
+        self,
+        feature_statistics_config: FeatureStatisticsConfig,
+        valid_feature_names: Optional[List[str]] = None,
+    ):
+        self.validate_feature_name(
+            feature_statistics_config.feature_name,
+            valid_feature_names=valid_feature_names,
+        )
+        if feature_statistics_config.statistics_comparison_configs is not None:
+            for sc_config in feature_statistics_config.statistics_comparison_configs:
+                self.validate_statistics_comparison_config(sc_config)
 
     def validate_statistics_comparison_config(
-        self,
-        metric: str,
-        threshold: Union[float, int],
-        id: Optional[int] = None,
-        relative: bool = False,
-        strict: bool = False,
-    ) -> Dict[str, Any]:
-        """Validates the statistics comparison config.
-
-        Args:
-            metric: str, required
-                Statistical metric to perform comparison on.
-            threshold: float, required
-                If statistics difference is above threshold, trigger an alert if configured.
-            relative: bool, optional
-                If true, compute the relative difference between the detection and reference statistics.
-                Defaults to false.
-            strict: bool, optional
-                If true, the statistics difference must be strictly above threshold to trigger an alert.
-                Defaults to false.
-
-        Raises:
-            ValueError: If the statistics comparison config is invalid.
-        """
-        if not isinstance(relative, bool):
+        self, statistics_comparison_config: StatisticsComparisonConfig
+    ):
+        if not isinstance(statistics_comparison_config.relative, bool):
             raise ValueError("relative must be a boolean value.")
 
-        if not isinstance(strict, bool):
+        if not isinstance(statistics_comparison_config.strict, bool):
             raise ValueError("strict must be a boolean value.")
 
-        if not isinstance(threshold, (int, float)):
+        if not isinstance(statistics_comparison_config.threshold, (int, float)):
             raise TypeError("threshold must be a numeric value.")
 
-        if not isinstance(metric, str):
+        if not isinstance(statistics_comparison_config.metric, str):
             raise TypeError(
                 "metric must be a string value. "
                 "Check the documentation for a list of supported metrics."
             )
         # TODO: [FSTORE-1205] Add more validation logic based on detection and reference window config.
-        if (
-            metric.lower() not in self._VALID_CATEGORICAL_METRICS
-            and metric.lower() not in self._VALID_FRACTIONAL_METRICS
-        ):
-            raise ValueError(
-                f"Invalid metric {metric.lower()}. " "Supported metrics are {}.".format(
-                    set(self._VALID_FRACTIONAL_METRICS).union(
-                        set(self._VALID_CATEGORICAL_METRICS)
-                    )
-                )
-            )
-
-        return {
-            "id": id,
-            "metric": metric.upper(),
-            "threshold": threshold,
-            "relative": relative,
-            "strict": strict,
-        }
+        self.validate_statistics_metric(statistics_comparison_config.metric)
 
     def validate_config_name(self, name: str):
         if not isinstance(name, str):
@@ -188,14 +199,30 @@ class FeatureMonitoringConfigEngine:
             )
 
     def validate_feature_name(
-        self, feature_name: Optional[str], valid_feature_names: List[str]
+        self, feature_name: Optional[str], valid_feature_names: Optional[List[str]]
     ):
+        if valid_feature_names is None:
+            return  # noop
         if feature_name is not None and not isinstance(feature_name, str):
             raise TypeError("Invalid feature name. Feature name must be a string.")
         if feature_name is not None and feature_name not in valid_feature_names:
             raise ValueError(
                 f"Invalid feature name. Feature name must be one of {valid_feature_names}."
             )
+
+    def validate_statistics_metric(self, metric: str):
+        metric_lower = metric.lower()
+        if (
+            metric_lower not in VALID_CATEGORICAL_METRICS
+            and metric_lower not in VALID_FRACTIONAL_METRICS
+        ):
+            raise ValueError(
+                f"Invalid metric {metric_lower}. " "Supported metrics are {}.".format(
+                    set(VALID_FRACTIONAL_METRICS).union(set(VALID_CATEGORICAL_METRICS))
+                )
+            )
+
+    # CRUD
 
     def save(
         self, config: "fmc.FeatureMonitoringConfig"
@@ -250,7 +277,7 @@ class FeatureMonitoringConfigEngine:
         """
         self._feature_monitoring_config_api.delete(config_id=config_id)
 
-    def get_feature_monitoring_configs(
+    def get(
         self,
         name: Optional[str] = None,
         feature_name: Optional[str] = None,
@@ -312,6 +339,8 @@ class FeatureMonitoringConfigEngine:
 
         return self._feature_monitoring_config_api.get_by_entity()
 
+    # operations
+
     def trigger_monitoring_job(
         self,
         job_name: str,
@@ -346,7 +375,7 @@ class FeatureMonitoringConfigEngine:
         self,
         entity: Union["feature_group.FeatureGroup", "feature_view.FeatureView"],
         config_name: str,
-    ) -> List[FeatureMonitoringResult]:
+    ) -> FeatureMonitoringResult:
         """Main function used by the job to actually perform the monitoring.
 
         Args:
@@ -359,45 +388,40 @@ class FeatureMonitoringConfigEngine:
                 outcome of the monitoring.
         """
         config = self._feature_monitoring_config_api.get_by_name(config_name)
-
         assert config is not None, "Feature monitoring config not found."
+        feature_names = config.get_feature_names()
 
         # TODO: [FSTORE-1206] Parallelize both single_window_monitoring calls and wait
         detection_statistics = (
             self._monitoring_window_config_engine.run_single_window_monitoring(
                 entity=entity,
                 monitoring_window_config=config.detection_window_config,
-                feature_name=config.feature_name,
+                feature_names=feature_names,
             )
         )
 
-        specific_value, reference_statistics = None, None
+        reference_statistics = None
         if config.reference_window_config is not None:
-            if (
-                config.reference_window_config.window_config_type
-                == mwc.WindowConfigType.SPECIFIC_VALUE
-            ):
-                specific_value = config.reference_window_config.specific_value
-            else:
-                reference_statistics = (
-                    self._monitoring_window_config_engine.run_single_window_monitoring(
-                        entity=entity,
-                        monitoring_window_config=config.reference_window_config,
-                        feature_name=config.feature_name,
-                    )
+            reference_statistics = (
+                self._monitoring_window_config_engine.run_single_window_monitoring(
+                    entity=entity,
+                    monitoring_window_config=config.reference_window_config,
+                    feature_names=feature_names,
                 )
+            )
 
         return self._result_engine.run_and_save_statistics_comparison(
             fm_config=config,
             detection_statistics=detection_statistics,
             reference_statistics=reference_statistics,
-            specific_value=specific_value,
         )
+
+    # builders
 
     def _build_default_statistics_monitoring_config(
         self,
         name: str,
-        feature_name: Optional[str] = None,
+        feature_names: List[str],
         start_date_time: Optional[Union[str, int, date, datetime, pd.Timestamp]] = None,
         description: Optional[str] = None,
         valid_feature_names: Optional[List[str]] = None,
@@ -432,18 +456,24 @@ class FeatureMonitoringConfigEngine:
         """
         self.validate_config_name(name)
         self.validate_description(description)
-        if feature_name is not None and valid_feature_names is not None:
-            self.validate_feature_name(feature_name, valid_feature_names)
+
+        if feature_names is not None and valid_feature_names is not None:
+            for f_name in feature_names:
+                self.validate_feature_name(f_name, valid_feature_names)
+
+        feature_statistics_configs = [
+            FeatureStatisticsConfig(feature_name=f_name) for f_name in feature_names
+        ]
 
         return fmc.FeatureMonitoringConfig(
             feature_store_id=self._feature_store_id,
             feature_group_id=self._feature_group_id,
             feature_view_name=self._feature_view_name,
             feature_view_version=self._feature_view_version,
+            feature_monitoring_type=fmc.FeatureMonitoringType.SCHEDULED_STATISTICS,
             name=name,
             description=description,
-            feature_name=feature_name,
-            feature_monitoring_type=fmc.FeatureMonitoringType.STATISTICS_COMPUTATION,
+            feature_statistics_configs=feature_statistics_configs,
             job_schedule={
                 "start_date_time": start_date_time or datetime.now(),
                 "end_date_time": end_date_time,
@@ -455,7 +485,6 @@ class FeatureMonitoringConfigEngine:
     def _build_default_feature_monitoring_config(
         self,
         name: str,
-        feature_name: str,
         start_date_time: Optional[Union[str, int, date, datetime, pd.Timestamp]] = None,
         description: Optional[str] = None,
         valid_feature_names: Optional[List[str]] = None,
@@ -488,7 +517,6 @@ class FeatureMonitoringConfigEngine:
             FeatureMonitoringConfig A Feature Monitoring Configuration to compute
               the statistics of a snapshot of all data present in the entity.
         """
-        self.validate_feature_name(feature_name, valid_feature_names)
         self.validate_config_name(name)
         self.validate_description(description)
 
@@ -499,14 +527,15 @@ class FeatureMonitoringConfigEngine:
             feature_view_version=self._feature_view_version,
             name=name,
             description=description,
-            feature_name=feature_name,
             # setting feature_monitoring_type to "STATISTICS_COMPARISON" allows
             # to raise an error if no reference window and comparison config are provided
             feature_monitoring_type=fmc.FeatureMonitoringType.STATISTICS_COMPARISON,
+            feature_statistics_configs=[],  # to be appended via the compare_on() method
             job_schedule={
                 "start_date_time": start_date_time or datetime.now(),
                 "end_date_time": end_date_time,
                 "cron_expression": cron_expression,
                 "enabled": True,
             },
+            valid_feature_names=valid_feature_names,
         ).with_detection_window()

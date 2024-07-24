@@ -292,12 +292,12 @@ PAGES = {
         ),
         # from feature group
         "feature_monitoring_config_creation_fg": [
-            "hsfs.feature_group.FeatureGroup.create_statistics_monitoring",
+            "hsfs.feature_group.FeatureGroup.create_scheduled_statistics",
             "hsfs.feature_group.FeatureGroup.create_feature_monitoring",
         ],
         # from feature view
         "feature_monitoring_config_creation_fv": [
-            "hsfs.feature_view.FeatureView.create_statistics_monitoring",
+            "hsfs.feature_view.FeatureView.create_scheduled_statistics",
             "hsfs.feature_view.FeatureView.create_feature_monitoring",
         ],
         # retrieval
